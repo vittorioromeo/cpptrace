@@ -12,14 +12,13 @@
 
 using namespace std::literals;
 
-
-static volatile int truthy = 2;
+static volatile int truthyFromCurrentZ = 2;
 
 // NOTE: returning something and then return stacktrace_multi_3(line_numbers) * rand(); is done to prevent TCO even
 // under LTO https://github.com/jeremy-rifkin/cpptrace/issues/179#issuecomment-2467302052
 CPPTRACE_FORCE_NO_INLINE int stacktrace_from_current_z_3(std::vector<int>& line_numbers) {
     static volatile int lto_guard; lto_guard = lto_guard + 1;
-    if(truthy) { // due to a MSVC warning about unreachable code
+    if(truthyFromCurrentZ) { // due to a MSVC warning about unreachable code
         line_numbers.insert(line_numbers.begin(), __LINE__ + 1);
         throw std::runtime_error("foobar");
     }

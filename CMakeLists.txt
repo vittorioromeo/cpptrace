@@ -387,6 +387,16 @@ if(CPPTRACE_GET_SYMBOLS_WITH_LIBDWARF)
   endif()
 endif()
 
+if(TARGET dwarf)
+  target_compile_options(dwarf PRIVATE "-w")
+  set_target_properties(dwarf PROPERTIES UNITY_BUILD OFF)
+endif()
+
+if(TARGET libzstd_static)
+  target_compile_options(libzstd_static PRIVATE "-w")
+  set_target_properties(libzstd_static PROPERTIES UNITY_BUILD OFF)
+endif()
+
 if(CPPTRACE_GET_SYMBOLS_WITH_DBGHELP)
   target_compile_definitions(${target_name} PUBLIC CPPTRACE_GET_SYMBOLS_WITH_DBGHELP)
   target_link_libraries(${target_name} PRIVATE dbghelp)
