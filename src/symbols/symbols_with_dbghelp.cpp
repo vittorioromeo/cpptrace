@@ -8,7 +8,6 @@
 #include "utils/error.hpp"
 
 #include <mutex>
-#include <regex>
 #include <system_error>
 #include <vector>
 
@@ -326,6 +325,15 @@ namespace dbghelp {
 
     std::recursive_mutex dbghelp_lock;
 
+    void fixCommas(std::string& signature) {
+        for (size_t i = 0; i < signature.size(); ++i) {
+            if (signature[i] == ',' && (i + 1 < signature.size()) && !isspace(signature[i + 1])) {
+                signature.insert(i + 1, " ");
+                ++i;
+            }
+        }
+    }
+
     // TODO: Handle backtrace_pcinfo calling the callback multiple times on inlined functions
     stacktrace_frame resolve_frame(HANDLE proc, frame_ptr addr) {
         // The get_frame_object_info() ends up being inexpensive, at on my machine
@@ -384,8 +392,7 @@ namespace dbghelp {
                 SymEnumSymbols(proc, 0, nullptr, enumerator_callback, &fi);
                 std::string signature = symbol->Name + std::string("(") + fi.str + ")";
                 // There's a phenomina with DIA not inserting commas after template parameters. Fix them here.
-                static std::regex comma_re(R"(,(?=\S))");
-                signature = std::regex_replace(signature, comma_re, ", ");
+                fixCommas(signature);
                 return {
                     addr,
                     object_frame.object_address,

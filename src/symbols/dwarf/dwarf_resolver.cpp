@@ -10,6 +10,7 @@
 #include "utils/utils.hpp"
 #include "platform/path.hpp"
 #include "platform/program_name.hpp" // For CPPTRACE_MAX_PATH
+#include "utils/UniquePtr.hpp"
 
 #if IS_APPLE
 #include "binary/mach-o.hpp"
@@ -19,7 +20,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <functional>
-#include <memory>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -95,7 +95,7 @@ namespace libdwarf {
         // Map from CU -> {srcfiles, count}
         std::unordered_map<Dwarf_Off, std::pair<char**, Dwarf_Signed>> srcfiles_cache;
         // Map from CU -> split full cu resolver
-        std::unordered_map<Dwarf_Off, std::unique_ptr<dwarf_resolver>> split_full_cu_resolvers;
+        std::unordered_map<Dwarf_Off, cpptrace::detail::UniquePtr<dwarf_resolver>> split_full_cu_resolvers;
         // info for resolving a dwo object
         optional<skeleton_info> skeleton;
 
@@ -162,9 +162,17 @@ namespace libdwarf {
 
             // Giving libdwarf a buffer for a true output path is needed for its automatic resolution of debuglink and
             // dSYM files. We don't utilize the dSYM logic here, we just care about debuglink.
-            std::unique_ptr<char[]> buffer;
+            struct CharArrayDeleter
+            {
+                void operator()(char* const ptr) const noexcept
+                {
+                    delete[] ptr;
+                }
+            };
+
+            cpptrace::detail::UniquePtr<char, CharArrayDeleter> buffer;
             if(use_buffer) {
-                buffer = std::unique_ptr<char[]>(new char[CPPTRACE_MAX_PATH]);
+                buffer = cpptrace::detail::UniquePtr<char, CharArrayDeleter>(new char[CPPTRACE_MAX_PATH]);
             }
             auto ret = wrap(
                 dwarf_init_path_a,
@@ -999,7 +1007,7 @@ namespace libdwarf {
                     if(it == split_full_cu_resolvers.end()) {
                         it = split_full_cu_resolvers.emplace(
                             off,
-                            std::unique_ptr<dwarf_resolver>(
+                            cpptrace::detail::UniquePtr<dwarf_resolver>(
                                 new dwarf_resolver(
                                     path,
                                     skeleton_info{cu_die.clone(), dwversion, *this}
@@ -1081,8 +1089,8 @@ namespace libdwarf {
         }
     };
 
-    std::unique_ptr<symbol_resolver> make_dwarf_resolver(const std::string& object_path) {
-        return std::unique_ptr<dwarf_resolver>(new dwarf_resolver(object_path));
+    cpptrace::detail::UniquePtr<symbol_resolver> make_dwarf_resolver(const std::string& object_path) {
+        return cpptrace::detail::UniquePtr<dwarf_resolver>(new dwarf_resolver(object_path));
     }
 }
 }

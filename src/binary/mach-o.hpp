@@ -3,12 +3,12 @@
 
 #include "utils/common.hpp"
 #include "utils/utils.hpp"
+#include "utils/UniquePtr.hpp"
 
 #if IS_APPLE
 
 #include <cstdint>
 #include <limits>
-#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -46,7 +46,7 @@ namespace detail {
 
         struct symtab_info_data {
             symtab_command symtab;
-            std::unique_ptr<char[]> stringtab;
+            cpptrace::detail::UniquePtr<char[]> stringtab;
             Result<const char*, internal_error> get_string(std::size_t index) const;
         };
 
@@ -80,7 +80,7 @@ namespace detail {
 
         void print_symbol_table_entry(
             const nlist_64& entry,
-            const std::unique_ptr<char[]>& stringtab,
+            const cpptrace::detail::UniquePtr<char[]>& stringtab,
             std::size_t stringsize,
             std::size_t j
         ) const;
@@ -123,7 +123,7 @@ namespace detail {
         template<std::size_t Bits>
         Result<nlist_64, internal_error> load_symtab_entry(std::uint32_t symbol_base, std::size_t index) const;
 
-        Result<std::unique_ptr<char[]>, internal_error> load_string_table(std::uint32_t offset, std::uint32_t byte_count) const;
+        Result<cpptrace::detail::UniquePtr<char[]>, internal_error> load_string_table(std::uint32_t offset, std::uint32_t byte_count) const;
 
         bool should_swap() const;
     };

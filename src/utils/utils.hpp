@@ -7,7 +7,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <memory>
 #include <new>
 #include <string>
 #include <type_traits>
@@ -16,6 +15,7 @@
 
 #include "utils/common.hpp"
 #include "utils/error.hpp"
+#include "utils/UniquePtr.hpp"
 
 namespace cpptrace {
 namespace detail {
@@ -527,11 +527,11 @@ namespace detail {
 
     template<typename T>
     class maybe_owned {
-        std::unique_ptr<T> owned;
+        cpptrace::detail::UniquePtr<T> owned;
         T* ptr;
     public:
         maybe_owned(T* ptr) : ptr(ptr) {}
-        maybe_owned(std::unique_ptr<T>&& owned) : owned(std::move(owned)), ptr(this->owned.get()) {}
+        maybe_owned(cpptrace::detail::UniquePtr<T>&& owned) : owned(std::move(owned)), ptr(this->owned.get()) {}
         T* operator->() {
             return ptr;
         }

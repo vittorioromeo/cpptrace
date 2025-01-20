@@ -9,11 +9,11 @@
 #include "binary/object.hpp"
 #include "binary/mach-o.hpp"
 #include "utils/utils.hpp"
+#include "utils/UniquePtr.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
-#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -26,15 +26,15 @@ namespace libdwarf {
         std::string object_path;
         bool path_ok = true;
         optional<std::unordered_map<std::string, uint64_t>> symbols;
-        std::unique_ptr<symbol_resolver> resolver;
+        cpptrace::detail::UniquePtr<symbol_resolver> resolver;
 
         target_object(std::string object_path) : object_path(std::move(object_path)) {}
 
-        std::unique_ptr<symbol_resolver>& get_resolver() {
+        cpptrace::detail::UniquePtr<symbol_resolver>& get_resolver() {
             if(!resolver) {
                 // this seems silly but it's an attempt to not repeatedly try to initialize new dwarf_resolvers if
                 // exceptions are thrown, e.g. if the path doesn't exist
-                resolver = std::unique_ptr<null_resolver>(new null_resolver);
+                resolver = cpptrace::detail::UniquePtr<null_resolver>(new null_resolver);
                 resolver = make_dwarf_resolver(object_path);
             }
             return resolver;
@@ -196,8 +196,8 @@ namespace libdwarf {
         };
     };
 
-    std::unique_ptr<symbol_resolver> make_debug_map_resolver(const std::string& object_path) {
-        return std::unique_ptr<debug_map_resolver>(new debug_map_resolver(object_path));
+    cpptrace::detail::UniquePtr<symbol_resolver> make_debug_map_resolver(const std::string& object_path) {
+        return cpptrace::detail::UniquePtr<debug_map_resolver>(new debug_map_resolver(object_path));
     }
     #endif
 }

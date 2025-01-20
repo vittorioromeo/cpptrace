@@ -219,7 +219,7 @@ namespace detail {
 
     void mach_o::print_symbol_table_entry(
         const nlist_64& entry,
-        const std::unique_ptr<char[]>& stringtab,
+        const cpptrace::detail::UniquePtr<char[]>& stringtab,
         std::size_t stringsize,
         std::size_t j
     ) const {
@@ -286,7 +286,7 @@ namespace detail {
                     }
                     print_symbol_table_entry(
                         entry.unwrap_value(),
-                        std::move(stringtab).value_or(std::unique_ptr<char[]>(nullptr)),
+                        std::move(stringtab).value_or(cpptrace::detail::UniquePtr<char[]>(nullptr)),
                         symtab.strsize,
                         j
                     );
@@ -605,8 +605,8 @@ namespace detail {
         return common;
     }
 
-    Result<std::unique_ptr<char[]>, internal_error> mach_o::load_string_table(std::uint32_t offset, std::uint32_t byte_count) const {
-        std::unique_ptr<char[]> buffer(new char[byte_count + 1]);
+    Result<cpptrace::detail::UniquePtr<char[]>, internal_error> mach_o::load_string_table(std::uint32_t offset, std::uint32_t byte_count) const {
+        cpptrace::detail::UniquePtr<char[]> buffer(new char[byte_count + 1]);
         if(std::fseek(file, load_base + offset, SEEK_SET) != 0) {
             return internal_error("fseek error while loading mach-o symbol table");
         }

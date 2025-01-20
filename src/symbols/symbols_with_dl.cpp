@@ -3,9 +3,9 @@
 #include <cpptrace/basic.hpp>
 #include "symbols/symbols.hpp"
 #include "binary/module_base.hpp"
+#include "utils/UniquePtr.hpp"
 
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 #include <dlfcn.h>

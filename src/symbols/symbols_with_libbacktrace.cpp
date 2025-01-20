@@ -5,10 +5,10 @@
 #include "platform/program_name.hpp"
 #include "utils/error.hpp"
 #include "utils/common.hpp"
+#include "utils/UniquePtr.hpp"
 
 #include <cstdint>
 #include <cstdio>
-#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <vector>

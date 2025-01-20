@@ -6,10 +6,10 @@
 #include "dwarf/resolver.hpp"
 #include "utils/common.hpp"
 #include "utils/utils.hpp"
+#include "utils/UniquePtr.hpp"
 
 #include <cstdint>
 #include <cstdio>
-#include <memory>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -18,7 +18,7 @@
 namespace cpptrace {
 namespace detail {
 namespace libdwarf {
-    std::unique_ptr<symbol_resolver> get_resolver_for_object(const std::string& object_path) {
+    cpptrace::detail::UniquePtr<symbol_resolver> get_resolver_for_object(const std::string& object_path) {
         #if IS_APPLE
         // Check if dSYM exist, if not fallback to debug map
         if(!directory_exists(object_path + ".dSYM")) {
@@ -31,12 +31,12 @@ namespace libdwarf {
     // not thread-safe, replies on caller to lock
     maybe_owned<symbol_resolver> get_resolver(const std::string& object_name) {
         // cache resolvers since objects are likely to be traced more than once
-        static std::unordered_map<std::string, std::unique_ptr<symbol_resolver>> resolver_map;
+        static std::unordered_map<std::string, cpptrace::detail::UniquePtr<symbol_resolver>> resolver_map;
         auto it = resolver_map.find(object_name);
         if(it != resolver_map.end()) {
             return it->second.get();
         } else {
-            std::unique_ptr<symbol_resolver> resolver_object = get_resolver_for_object(object_name);
+            cpptrace::detail::UniquePtr<symbol_resolver> resolver_object = get_resolver_for_object(object_name);
             if(get_cache_mode() == cache_mode::prioritize_speed) {
                 // .emplace needed, for some reason .insert tries to copy <= gcc 7.2
                 return resolver_map.emplace(object_name, std::move(resolver_object)).first->second.get();

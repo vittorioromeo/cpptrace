@@ -4,8 +4,7 @@
 #include <cpptrace/basic.hpp>
 #include "symbols/symbols.hpp"
 #include "platform/platform.hpp"
-
-#include <memory>
+#include "utils/UniquePtr.hpp"
 
 #if false
  #define CPPTRACE_FORCE_NO_INLINE_FOR_PROFILING CPPTRACE_FORCE_NO_INLINE
@@ -45,9 +44,9 @@ namespace libdwarf {
         };
     };
 
-    std::unique_ptr<symbol_resolver> make_dwarf_resolver(const std::string& object_path);
+    cpptrace::detail::UniquePtr<symbol_resolver> make_dwarf_resolver(const std::string& object_path);
     #if IS_APPLE
-     std::unique_ptr<symbol_resolver> make_debug_map_resolver(const std::string& object_path);
+     cpptrace::detail::UniquePtr<symbol_resolver> make_debug_map_resolver(const std::string& object_path);
     #endif
 }
 }
