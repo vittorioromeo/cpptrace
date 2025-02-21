@@ -795,7 +795,7 @@ Result<maybe_owned<mach_o>, internal_error> open_mach_o_cached(
                 [](mach_o&& obj)
                 {
                     return maybe_owned<mach_o>{
-                        detail::make_unique<mach_o>(std::move(obj))};
+                        detail::makeUnique<mach_o>(std::move(obj))};
                 });
     }
     else

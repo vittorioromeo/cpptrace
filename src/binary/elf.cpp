@@ -416,7 +416,7 @@ namespace detail {
     Result<maybe_owned<elf>, internal_error> open_elf_cached(const std::string& object_path) {
         if(get_cache_mode() == cache_mode::prioritize_memory) {
             return elf::open_elf(object_path)
-                .transform([](elf&& obj) { return maybe_owned<elf>{detail::make_unique<elf>(std::move(obj))}; });
+                .transform([](elf&& obj) { return maybe_owned<elf>{detail::makeUnique<elf>(std::move(obj))}; });
         } else {
             std::mutex m;
             std::unique_lock<std::mutex> lock{m};
