@@ -27,10 +27,9 @@ namespace libdwarf {
 
     [[noreturn]] inline void handle_dwarf_error(Dwarf_Debug dbg, Dwarf_Error error) {
         Dwarf_Unsigned ev = dwarf_errno(error);
-        char* msg = dwarf_errmsg(error);
-        (void)dbg;
-        // dwarf_dealloc_error(dbg, error);
-        throw internal_error("dwarf error {} {}", ev, msg);
+        // dwarf_dealloc_error deallocates the message, attaching to msg is convenient
+        auto msg = raii_wrap(dwarf_errmsg(error), [dbg, error] (char*) { dwarf_dealloc_error(dbg, error); });
+        throw internal_error(microfmt::format("dwarf error {} {}", ev, msg.get()));
     }
 
     struct die_object {
@@ -67,8 +66,12 @@ namespace libdwarf {
         }
 
         ~die_object() {
+            release();
+        }
+
+        void release() {
             if(die) {
-                dwarf_dealloc_die(die);
+                dwarf_dealloc_die(exchange(die, nullptr));
             }
         }
 
@@ -76,16 +79,15 @@ namespace libdwarf {
 
         die_object& operator=(const die_object&) = delete;
 
-        die_object(die_object&& other) noexcept : dbg(other.dbg), die(other.die) {
-            // done for finding mistakes, attempts to use the die_object after this should segfault
-            // a valid use otherwise would be moved_from.get_sibling() which would get the next CU
-            other.dbg = nullptr;
-            other.die = nullptr;
-        }
+        // dbg doesn't strictly have to be st to null but it helps ensure attempts to use the die_object after this to
+        // segfault. A valid use otherwise would be moved_from.get_sibling() which would get the next CU.
+        die_object(die_object&& other) noexcept
+            : dbg(exchange(other.dbg, nullptr)), die(exchange(other.die, nullptr)) {}
 
         die_object& operator=(die_object&& other) noexcept {
-            std::swap(dbg, other.dbg);
-            std::swap(die, other.die);
+            release();
+            dbg = exchange(other.dbg, nullptr);
+            die = exchange(other.die, nullptr);
             return *this;
         }
 

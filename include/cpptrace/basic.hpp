@@ -3,7 +3,7 @@
 
 #include <cpptrace/forward.hpp>
 
-#include <limits>
+#include <climits>
 #include <string>
 #include <vector>
 #include <iosfwd>
@@ -29,6 +29,12 @@
 #      define CPPTRACE_EXPORT CPPTRACE_IMPORT_ATTR
 #    endif
 #  endif
+#endif
+
+#if __cplusplus >= 201703L
+ #define CONSTEXPR_SINCE_CPP17 constexpr
+#else
+ #define CONSTEXPR_SINCE_CPP17
 #endif
 
 #ifdef _MSC_VER
@@ -93,39 +99,53 @@ namespace cpptrace {
     // The max value of the type is used as a sentinel
     // This is used over std::optional because the library is C++11 and also std::optional is a bit heavy-duty for this
     // use.
-    template<typename T, typename std::enable_if<std::is_integral<T>::value, int>::type = 0>
+    template <typename>
+    inline constexpr auto maxValue = nullptr;
+
+    template <> inline constexpr auto maxValue<unsigned int> = UINT_MAX;
+    template <> inline constexpr auto maxValue<unsigned long> = ULONG_MAX;
+    template <> inline constexpr auto maxValue<unsigned long long> = ULONG_LONG_MAX;
+
+    template<typename T>
     struct nullable {
-        T raw_value;
-        nullable& operator=(T value) {
+        static_assert(std::is_integral_v<T>);
+
+        T raw_value = null_value();
+        constexpr nullable() noexcept = default;
+        constexpr nullable(T value) noexcept : raw_value(value) {}
+        CONSTEXPR_SINCE_CPP17 nullable& operator=(T value) noexcept {
             raw_value = value;
             return *this;
         }
-        bool has_value() const noexcept {
-            return raw_value != (std::numeric_limits<T>::max)();
+        constexpr bool has_value() const noexcept {
+            return raw_value != null_value();
         }
-        T& value() noexcept {
+        CONSTEXPR_SINCE_CPP17 T& value() noexcept {
             return raw_value;
         }
-        const T& value() const noexcept {
+        constexpr const T& value() const noexcept {
             return raw_value;
         }
-        T value_or(T alternative) const noexcept {
+        constexpr T value_or(T alternative) const noexcept {
             return has_value() ? raw_value : alternative;
         }
-        void swap(nullable& other) noexcept {
+        CONSTEXPR_SINCE_CPP17 void swap(nullable& other) noexcept {
             std::swap(raw_value, other.raw_value);
         }
-        void reset() noexcept {
-            raw_value = (std::numeric_limits<T>::max)();
+        CONSTEXPR_SINCE_CPP17 void reset() noexcept {
+            raw_value = null_value();
         }
-        bool operator==(const nullable& other) const noexcept {
+        constexpr bool operator==(const nullable& other) const noexcept {
             return raw_value == other.raw_value;
         }
-        bool operator!=(const nullable& other) const noexcept {
+        constexpr bool operator!=(const nullable& other) const noexcept {
             return raw_value != other.raw_value;
         }
+        constexpr static T null_value() noexcept {
+            return maxValue<T>;
+        }
         constexpr static nullable null() noexcept {
-            return { (std::numeric_limits<T>::max)() };
+            return { null_value() };
         }
     };
 
@@ -182,8 +202,6 @@ namespace cpptrace {
         inline const_iterator cbegin() const noexcept { return frames.cbegin(); }
         inline const_iterator cend() const noexcept { return frames.cend(); }
     private:
-        void print(std::ostream& stream, bool color, bool newline_at_end, const char* header) const;
-        void print_with_snippets(std::ostream& stream, bool color, bool newline_at_end, const char* header) const;
         friend void print_terminate_trace();
     };
 
@@ -226,6 +244,7 @@ namespace cpptrace {
     // signal-safe
     CPPTRACE_EXPORT void get_safe_object_frame(frame_ptr address, safe_object_frame* out);
     CPPTRACE_EXPORT bool can_signal_safe_unwind();
+    CPPTRACE_EXPORT bool can_get_safe_object_frame();
 }
 
 #ifdef _MSC_VER

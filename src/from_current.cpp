@@ -4,6 +4,7 @@
 
 #include <system_error>
 #include <typeinfo>
+#include <limits>
 
 #include "platform/platform.hpp"
 #include "utils/microfmt.hpp"

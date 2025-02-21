@@ -9,7 +9,7 @@ set(package_name "cpptrace")
 
 project(
   cpptrace
-  VERSION 0.7.5
+  VERSION 0.8.1
   DESCRIPTION "Simple, portable, and self-contained stacktrace library for C++11 and newer "
   HOMEPAGE_URL "https://github.com/jeremy-rifkin/cpptrace"
   LANGUAGES C CXX
@@ -70,6 +70,19 @@ include(cmake/Autoconfig.cmake)
 
 # =================================================== Library Setup ====================================================
 
+if(NOT CPPTRACE_BUILD_NO_SYMBOLS)
+  set(
+    debug
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g>
+    $<$<CXX_COMPILER_ID:MSVC>:/DEBUG>
+  )
+else()
+  add_compile_options($<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g0>)
+  set(
+    debug
+  )
+endif()
+
 # Target that we can modify (can't modify ALIAS targets)
 # Target name should not be the same as ${PROJECT_NAME}, causes add_subdirectory issues
 set(target_name "cpptrace-lib")
@@ -100,6 +113,7 @@ target_sources(
     src/ctrace.cpp
     src/exceptions.cpp
     src/from_current.cpp
+    src/formatting.cpp
     src/options.cpp
     src/utils.cpp
     src/demangle/demangle_with_cxxabi.cpp
@@ -107,6 +121,7 @@ target_sources(
     src/demangle/demangle_with_winapi.cpp
     src/snippets/snippet.cpp
     src/symbols/dwarf/debug_map_resolver.cpp
+    src/symbols/dwarf/dwarf_options.cpp
     src/symbols/dwarf/dwarf_resolver.cpp
     src/symbols/symbols_core.cpp
     src/symbols/symbols_with_addr2line.cpp
@@ -123,7 +138,7 @@ target_sources(
     src/unwind/unwind_with_winapi.cpp
     src/utils/microfmt.cpp
     src/utils/utils.cpp
-    src/platform/dbghelp_syminit_manager.cpp
+    src/platform/dbghelp_utils.cpp
 )
 
 target_include_directories(
@@ -200,13 +215,17 @@ target_include_directories(
     "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
 )
 
-# Require C++11 support
+# Require C++20 support
 target_compile_features(
     ${target_name}
-    PRIVATE cxx_std_11
+    PRIVATE cxx_std_20
 )
 
 target_compile_definitions(${target_name} PRIVATE NOMINMAX)
+
+if(HAS_ATTRIBUTE_PACKED)
+  target_compile_definitions(${target_name} PRIVATE HAS_ATTRIBUTE_PACKED)
+endif()
 
 if(NOT CPPTRACE_STD_FORMAT)
   target_compile_definitions(${target_name} PUBLIC CPPTRACE_NO_STD_FORMAT)
@@ -336,11 +355,14 @@ if(CPPTRACE_GET_SYMBOLS_WITH_LIBDWARF)
     endif()
   endif()
   if(CPPTRACE_CONAN)
+    set(dwarf_lib libdwarf::libdwarf)
     target_link_libraries(${target_name} PRIVATE libdwarf::libdwarf)
   elseif(CPPTRACE_VCPKG)
+    set(dwarf_lib libdwarf::dwarf)
     target_link_libraries(${target_name} PRIVATE libdwarf::dwarf)
   elseif(CPPTRACE_USE_EXTERNAL_LIBDWARF)
     if(DEFINED LIBDWARF_LIBRARIES)
+      set(dwarf_lib ${LIBDWARF_LIBRARIES})
       target_link_libraries(${target_name} PRIVATE ${LIBDWARF_LIBRARIES})
     else()
       # if LIBDWARF_LIBRARIES wasn't set by find_package, try looking for libdwarf::dwarf-static,
@@ -358,6 +380,7 @@ if(CPPTRACE_GET_SYMBOLS_WITH_LIBDWARF)
       else()
         message(FATAL_ERROR "Couldn't find libdwarf target name to link against")
       endif()
+      set(dwarf_lib ${LIBDWARF_LIBRARIES})
       target_link_libraries(${target_name} PRIVATE ${LIBDWARF_LIBRARIES})
     endif()
     # There seems to be no consistency at all about where libdwarf decides to place its headers........ Figure out if
@@ -380,6 +403,7 @@ if(CPPTRACE_GET_SYMBOLS_WITH_LIBDWARF)
       message(FATAL_ERROR "Couldn't find libdwarf.h")
     endif()
   else()
+    set(dwarf_lib libdwarf::dwarf-static)
     target_link_libraries(${target_name} PRIVATE libdwarf::dwarf-static)
   endif()
   if(UNIX)
@@ -505,7 +529,7 @@ if(NOT CMAKE_SKIP_INSTALL_RULES)
   include(cmake/InstallRules.cmake)
 endif()
 
-# ===================================================== Demo/test ======================================================
+# ================================================== Demo/test/tools ===================================================
 
 if(CPPTRACE_BUILD_TESTING)
   if(PROJECT_IS_TOP_LEVEL)
@@ -516,4 +540,8 @@ endif()
 
 if(CPPTRACE_BUILD_BENCHMARKING)
   add_subdirectory(benchmarking)
+endif()
+
+if(CPPTRACE_BUILD_TOOLS)
+  add_subdirectory(tools)
 endif()

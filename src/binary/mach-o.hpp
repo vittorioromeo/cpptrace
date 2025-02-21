@@ -28,6 +28,23 @@ namespace detail {
     };
 
     class mach_o {
+    public:
+        struct debug_map_entry {
+            uint64_t source_address;
+            uint64_t size;
+            std::string name;
+        };
+
+        struct symbol_entry {
+            uint64_t address;
+            std::string name;
+        };
+
+        // map from object file to a vector of symbols to resolve
+        using debug_map = std::unordered_map<std::string, std::vector<debug_map_entry>>;
+
+    private:
+
         file_wrapper file;
         std::string object_path;
         std::uint32_t magic;
@@ -46,12 +63,15 @@ namespace detail {
 
         struct symtab_info_data {
             symtab_command symtab;
-            cpptrace::detail::UniquePtr<char[]> stringtab;
+            optional<std::vector<char>> stringtab;
             Result<const char*, internal_error> get_string(std::size_t index) const;
         };
 
         bool tried_to_load_symtab = false;
         optional<symtab_info_data> symtab_info;
+
+        bool tried_to_load_symbols = false;
+        optional<std::vector<symbol_entry>> symbols;
 
         mach_o(
             file_wrapper file,
@@ -80,31 +100,19 @@ namespace detail {
 
         void print_symbol_table_entry(
             const nlist_64& entry,
-            const cpptrace::detail::UniquePtr<char[]>& stringtab,
+            const char* stringtab,
             std::size_t stringsize,
             std::size_t j
         ) const;
 
         void print_symbol_table();
 
-        struct debug_map_entry {
-            uint64_t source_address;
-            uint64_t size;
-            std::string name;
-        };
-
-        struct symbol_entry {
-            uint64_t address;
-            std::string name;
-        };
-
-        // map from object file to a vector of symbols to resolve
-        using debug_map = std::unordered_map<std::string, std::vector<debug_map_entry>>;
-
         // produce information similar to dsymutil -dump-debug-map
         Result<debug_map, internal_error> get_debug_map();
 
-        Result<std::vector<symbol_entry>, internal_error> symbol_table();
+        Result<const std::vector<symbol_entry>&, internal_error> symbol_table();
+
+        optional<std::string> lookup_symbol(frame_ptr pc);
 
         // produce information similar to dsymutil -dump-debug-map
         static void print_debug_map(const debug_map& debug_map);
@@ -123,12 +131,14 @@ namespace detail {
         template<std::size_t Bits>
         Result<nlist_64, internal_error> load_symtab_entry(std::uint32_t symbol_base, std::size_t index) const;
 
-        Result<cpptrace::detail::UniquePtr<char[]>, internal_error> load_string_table(std::uint32_t offset, std::uint32_t byte_count) const;
+        Result<std::vector<char>, internal_error> load_string_table(std::uint32_t offset, std::uint32_t byte_count) const;
 
         bool should_swap() const;
     };
 
     Result<bool, internal_error> macho_is_fat(const std::string& object_path);
+
+    NODISCARD Result<maybe_owned<mach_o>, internal_error> open_mach_o_cached(const std::string& object_path);
 }
 }
 

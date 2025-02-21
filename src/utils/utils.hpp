@@ -2,7 +2,6 @@
 #define UTILS_HPP
 
 #include <algorithm>
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -16,6 +15,8 @@
 #include "utils/common.hpp"
 #include "utils/error.hpp"
 #include "utils/UniquePtr.hpp"
+#include "utils/optional.hpp"
+#include "utils/result.hpp"
 
 namespace cpptrace {
 namespace detail {
@@ -35,7 +36,7 @@ namespace detail {
     }
 
     template<typename C>
-    inline std::string join(const C& container, const std::string& delim) {
+    std::string join(const C& container, const std::string& delim) {
         auto iter = std::begin(container);
         auto end = std::end(container);
         std::string str;
@@ -80,6 +81,10 @@ namespace detail {
         const std::size_t left = str.find_first_not_of(whitespace);
         const std::size_t right = str.find_last_not_of(whitespace) + 1;
         return str.substr(left, right - left);
+    }
+
+    inline bool starts_with(const std::string& str, const std::string& prefix) {
+        return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
     }
 
     inline bool is_little_endian() {
@@ -141,265 +146,6 @@ namespace detail {
     constexpr unsigned n_digits(unsigned value) noexcept {
         return value < 10 ? 1 : 1 + n_digits(value / 10);
     }
-    static_assert(n_digits(1) == 1, "n_digits utility producing the wrong result");
-    static_assert(n_digits(9) == 1, "n_digits utility producing the wrong result");
-    static_assert(n_digits(10) == 2, "n_digits utility producing the wrong result");
-    static_assert(n_digits(11) == 2, "n_digits utility producing the wrong result");
-    static_assert(n_digits(1024) == 4, "n_digits utility producing the wrong result");
-
-    struct nullopt_t {};
-
-    static constexpr nullopt_t nullopt;
-
-    template<
-        typename T,
-        typename std::enable_if<!std::is_same<typename std::decay<T>::type, void>::value, int>::type = 0
-    >
-    class optional {
-        union {
-            char x;
-            T uvalue;
-        };
-
-        bool holds_value = false;
-
-    public:
-        optional() noexcept {}
-
-        optional(nullopt_t) noexcept {}
-
-        ~optional() {
-            reset();
-        }
-
-        optional(const optional& other) : holds_value(other.holds_value) {
-            if(holds_value) {
-                new (static_cast<void*>(std::addressof(uvalue))) T(other.uvalue);
-            }
-        }
-
-        optional(optional&& other)
-            noexcept(std::is_nothrow_move_constructible<T>::value)
-            : holds_value(other.holds_value)
-        {
-            if(holds_value) {
-                new (static_cast<void*>(std::addressof(uvalue))) T(std::move(other.uvalue));
-            }
-        }
-
-        optional& operator=(const optional& other) {
-            optional copy(other);
-            swap(copy);
-            return *this;
-        }
-
-        optional& operator=(optional&& other)
-            noexcept(std::is_nothrow_move_assignable<T>::value && std::is_nothrow_move_constructible<T>::value)
-        {
-            reset();
-            if(other.holds_value) {
-                new (static_cast<void*>(std::addressof(uvalue))) T(std::move(other.uvalue));
-                holds_value = true;
-            }
-            return *this;
-        }
-
-        template<
-            typename U = T,
-            typename std::enable_if<!std::is_same<typename std::decay<U>::type, optional<T>>::value, int>::type = 0
-        >
-        optional(U&& value) : holds_value(true) {
-            new (static_cast<void*>(std::addressof(uvalue))) T(std::forward<U>(value));
-        }
-
-        template<
-            typename U = T,
-            typename std::enable_if<!std::is_same<typename std::decay<U>::type, optional<T>>::value, int>::type = 0
-        >
-        optional& operator=(U&& value) {
-            optional o(std::forward<U>(value));
-            swap(o);
-            return *this;
-        }
-
-        optional& operator=(nullopt_t) noexcept {
-            reset();
-            return *this;
-        }
-
-        void swap(optional& other) noexcept {
-            if(holds_value && other.holds_value) {
-                std::swap(uvalue, other.uvalue);
-            } else if(holds_value && !other.holds_value) {
-                new (&other.uvalue) T(std::move(uvalue));
-                uvalue.~T();
-            } else if(!holds_value && other.holds_value) {
-                new (static_cast<void*>(std::addressof(uvalue))) T(std::move(other.uvalue));
-                other.uvalue.~T();
-            }
-            std::swap(holds_value, other.holds_value);
-        }
-
-        bool has_value() const {
-            return holds_value;
-        }
-
-        explicit operator bool() const {
-            return holds_value;
-        }
-
-        void reset() {
-            if(holds_value) {
-                uvalue.~T();
-            }
-            holds_value = false;
-        }
-
-        NODISCARD T& unwrap() & {
-            ASSERT(holds_value, "Optional does not contain a value");
-            return uvalue;
-        }
-
-        NODISCARD const T& unwrap() const & {
-            ASSERT(holds_value, "Optional does not contain a value");
-            return uvalue;
-        }
-
-        NODISCARD T&& unwrap() && {
-            ASSERT(holds_value, "Optional does not contain a value");
-            return std::move(uvalue);
-        }
-
-        NODISCARD const T&& unwrap() const && {
-            ASSERT(holds_value, "Optional does not contain a value");
-            return std::move(uvalue);
-        }
-
-        template<typename U>
-        NODISCARD T value_or(U&& default_value) const & {
-            return holds_value ? uvalue : static_cast<T>(std::forward<U>(default_value));
-        }
-
-        template<typename U>
-        NODISCARD T value_or(U&& default_value) && {
-            return holds_value ? std::move(uvalue) : static_cast<T>(std::forward<U>(default_value));
-        }
-    };
-
-    extern std::atomic_bool absorb_trace_exceptions;
-
-    template<typename T, typename E, typename std::enable_if<!std::is_same<T, E>::value, int>::type = 0>
-    class Result {
-        union {
-            T value_;
-            E error_;
-        };
-        enum class member { value, error };
-        member active;
-    public:
-        Result(T&& value) : value_(std::move(value)), active(member::value) {}
-        Result(E&& error) : error_(std::move(error)), active(member::error) {
-            if(!absorb_trace_exceptions.load()) {
-                std::fprintf(stderr, "%s\n", unwrap_error().what());
-            }
-        }
-        Result(T& value) : value_(T(value)), active(member::value) {}
-        Result(E& error) : error_(E(error)), active(member::error) {
-            if(!absorb_trace_exceptions.load()) {
-                std::fprintf(stderr, "%s\n", unwrap_error().what());
-            }
-        }
-        Result(Result&& other) : active(other.active) {
-            if(other.active == member::value) {
-                new (&value_) T(std::move(other.value_));
-            } else {
-                new (&error_) E(std::move(other.error_));
-            }
-        }
-        ~Result() {
-            if(active == member::value) {
-                value_.~T();
-            } else {
-                error_.~E();
-            }
-        }
-
-        bool has_value() const {
-            return active == member::value;
-        }
-
-        bool is_error() const {
-            return active == member::error;
-        }
-
-        explicit operator bool() const {
-            return has_value();
-        }
-
-        NODISCARD optional<T> value() const & {
-            return has_value() ? value_ : nullopt;
-        }
-
-        NODISCARD optional<E> error() const & {
-            return is_error() ? error_ : nullopt;
-        }
-
-        NODISCARD optional<T> value() && {
-            return has_value() ? std::move(value_) : nullopt;
-        }
-
-        NODISCARD optional<E> error() && {
-            return is_error() ? std::move(error_) : nullopt;
-        }
-
-        NODISCARD T& unwrap_value() & {
-            ASSERT(has_value(), "Result does not contain a value");
-            return value_;
-        }
-
-        NODISCARD const T& unwrap_value() const & {
-            ASSERT(has_value(), "Result does not contain a value");
-            return value_;
-        }
-
-        NODISCARD T unwrap_value() && {
-            ASSERT(has_value(), "Result does not contain a value");
-            return std::move(value_);
-        }
-
-        NODISCARD E& unwrap_error() & {
-            ASSERT(is_error(), "Result does not contain an error");
-            return error_;
-        }
-
-        NODISCARD const E& unwrap_error() const & {
-            ASSERT(is_error(), "Result does not contain an error");
-            return error_;
-        }
-
-        NODISCARD E unwrap_error() && {
-            ASSERT(is_error(), "Result does not contain an error");
-            return std::move(error_);
-        }
-
-        template<typename U>
-        NODISCARD T value_or(U&& default_value) const & {
-            return has_value() ? value_ : static_cast<T>(std::forward<U>(default_value));
-        }
-
-        template<typename U>
-        NODISCARD T value_or(U&& default_value) && {
-            return has_value() ? std::move(value_) : static_cast<T>(std::forward<U>(default_value));
-        }
-
-        void drop_error() const {
-            if(is_error()) {
-                std::fprintf(stderr, "%s\n", unwrap_error().what());
-            }
-        }
-    };
-
-    struct monostate {};
 
     // TODO: Re-evaluate use of off_t
     template<typename T, typename std::enable_if<std::is_trivial<T>::value, int>::type = 0>
@@ -417,9 +163,9 @@ namespace detail {
     // shamelessly stolen from stackoverflow
     bool directory_exists(const std::string& path);
 
-    inline std::string basename(const std::string& path) {
+    inline std::string basename(const std::string& path, bool maybe_windows = false) {
         // Assumes no trailing /'s
-        auto pos = path.rfind('/');
+        auto pos = path.find_last_of(maybe_windows ? "/\\" : "/");
         if(pos == std::string::npos) {
             return path;
         } else {
@@ -443,29 +189,32 @@ namespace detail {
         return static_cast<U>(v);
     }
 
+    template<typename T, typename U = T>
+    T exchange(T& obj, U&& value) {
+        T old = std::move(obj);
+        obj = std::forward<U>(value);
+        return old;
+    }
+
+    struct monostate {};
+
     // TODO: Rework some stuff here. Not sure deleters should be optional or moved.
     // Also allow file_wrapper file = std::fopen(object_path.c_str(), "rb");
     template<
         typename T,
-        typename D
-        // workaround for:
+        typename D,
+        // Note: Previously checked if D was invocable and returned void but this kept causing problems for MSVC
         //  == 19.38-specific msvc bug https://developercommunity.visualstudio.com/t/MSVC-1938331290-preview-fails-to-comp/10505565
         //  <= 19.23 msvc also appears to fail (but for a different reason https://godbolt.org/z/6Y5EvdWPK)
-        #if !defined(_MSC_VER) || !(_MSC_VER <= 1923 || _MSC_VER == 1938)
-         ,
-         typename std::enable_if<
-             std::is_same<decltype(std::declval<D>()(std::declval<T>())), void>::value,
-             int
-         >::type = 0,
-         typename std::enable_if<
-             std::is_standard_layout<T>::value && std::is_trivial<T>::value,
-             int
-         >::type = 0,
-         typename std::enable_if<
-             std::is_nothrow_move_constructible<T>::value,
-             int
-         >::type = 0
-        #endif
+        //  <= 19.39 msvc also has trouble with it for different reasons https://godbolt.org/z/aPPPT7z3z
+        typename std::enable_if<
+            std::is_standard_layout<T>::value && std::is_trivial<T>::value,
+            int
+        >::type = 0,
+        typename std::enable_if<
+            std::is_nothrow_move_constructible<T>::value,
+            int
+        >::type = 0
     >
     class raii_wrapper {
         T obj;
@@ -497,22 +246,7 @@ namespace detail {
         }
     };
 
-    template<
-        typename T,
-        typename D
-        // workaround a msvc bug https://developercommunity.visualstudio.com/t/MSVC-1938331290-preview-fails-to-comp/10505565
-        #if !defined(_MSC_VER) || _MSC_VER != 1938
-         ,
-         typename std::enable_if<
-             std::is_same<decltype(std::declval<D>()(std::declval<T>())), void>::value,
-             int
-         >::type = 0,
-         typename std::enable_if<
-             std::is_standard_layout<T>::value && std::is_trivial<T>::value,
-             int
-         >::type = 0
-        #endif
-    >
+    template<typename T, typename D>
     raii_wrapper<typename std::remove_reference<T>::type, D> raii_wrap(T obj, D deleter) {
         return raii_wrapper<typename std::remove_reference<T>::type, D>(obj, deleter);
     }
@@ -535,7 +269,40 @@ namespace detail {
         T* operator->() {
             return ptr;
         }
+        T& operator*() {
+            return *ptr;
+        }
     };
+
+    template<typename F>
+    class scope_guard {
+        F f;
+        bool active;
+    public:
+        template<
+            typename G,
+            typename std::enable_if<!std::is_same<typename std::decay<G>::type, scope_guard<F>>::value, int>::type = 0
+        >
+        scope_guard(G&& f) : f(std::forward<F>(f)), active(true) {}
+        ~scope_guard() {
+            if(active) {
+                f();
+            }
+        }
+        scope_guard(const scope_guard&) = delete;
+        scope_guard(scope_guard&& other) : f(std::move(other.f)), active(exchange(other.active, false)) {}
+        scope_guard& operator=(const scope_guard&) = delete;
+        scope_guard& operator=(scope_guard&& other) {
+            f = std::move(other.f);
+            active = exchange(other.active, false);
+            return *this;
+        }
+    };
+
+    template<typename F>
+    NODISCARD auto scope_exit(F&& f) -> scope_guard<F> {
+        return scope_guard<F>(std::forward<F>(f));
+    }
 }
 }
 

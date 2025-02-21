@@ -6,6 +6,7 @@
 #include "utils/error.hpp"
 #include "utils/common.hpp"
 #include "utils/UniquePtr.hpp"
+#include "options.hpp"
 
 #include <cstdint>
 #include <cstdio>

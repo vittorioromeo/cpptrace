@@ -4,7 +4,6 @@
 #include <cpptrace/basic.hpp>
 
 #include "platform/platform.hpp"
-#include "options.hpp"
 
 #include <cstdint>
 
@@ -29,6 +28,13 @@
  #define MSVC_CDECL __cdecl
 #else
  #define MSVC_CDECL
+#endif
+
+// support is pretty good https://godbolt.org/z/djTqv7WMY, checked in cmake during config
+#ifdef HAS_ATTRIBUTE_PACKED
+ #define PACKED __attribute__((packed))
+#else
+ #define PACKED
 #endif
 
 namespace cpptrace {

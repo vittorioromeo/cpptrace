@@ -34,7 +34,7 @@ namespace libdwarf {
             if(!resolver) {
                 // this seems silly but it's an attempt to not repeatedly try to initialize new dwarf_resolvers if
                 // exceptions are thrown, e.g. if the path doesn't exist
-                resolver = cpptrace::detail::UniquePtr<null_resolver>(new null_resolver);
+                resolver = cpptrace::detail::makeUnique<null_resolver>();
                 resolver = make_dwarf_resolver(object_path);
             }
             return resolver;
@@ -46,11 +46,11 @@ namespace libdwarf {
                 // the path doesn't exist
                 std::unordered_map<std::string, uint64_t> symbols;
                 this->symbols = symbols;
-                auto obj = mach_o::open_mach_o(object_path);
-                if(!obj) {
+                auto mach_o_object = open_mach_o_cached(object_path);
+                if(!mach_o_object) {
                     return this->symbols.unwrap();
                 }
-                auto symbol_table = obj.unwrap_value().symbol_table();
+                const auto& symbol_table = mach_o_object.unwrap_value()->symbol_table();
                 if(!symbol_table) {
                     return this->symbols.unwrap();
                 }
@@ -100,7 +100,7 @@ namespace libdwarf {
         uint64_t size;
         std::string name;
         nullable<uint64_t> target_address; // T(-1) is used as a sentinel
-        std::size_t object_index;
+        std::size_t object_index; // index into target_objects
     };
 
     class debug_map_resolver : public symbol_resolver {
@@ -110,11 +110,11 @@ namespace libdwarf {
         debug_map_resolver(const std::string& source_object_path) {
             // load mach-o
             // TODO: Cache somehow?
-            auto obj = mach_o::open_mach_o(source_object_path);
-            if(!obj) {
+            auto mach_o_object = open_mach_o_cached(source_object_path);
+            if(!mach_o_object) {
                 return;
             }
-            mach_o& source_mach = obj.unwrap_value();
+            mach_o& source_mach = *mach_o_object.unwrap_value();
             auto source_debug_map = source_mach.get_debug_map();
             if(!source_debug_map) {
                 return;
@@ -137,6 +137,7 @@ namespace libdwarf {
                 }
             }
             // sort for binary lookup later
+            // TODO: Redundant?
             std::sort(
                 symbols.begin(),
                 symbols.end(),
@@ -197,7 +198,7 @@ namespace libdwarf {
     };
 
     cpptrace::detail::UniquePtr<symbol_resolver> make_debug_map_resolver(const std::string& object_path) {
-        return cpptrace::detail::UniquePtr<debug_map_resolver>(new debug_map_resolver(object_path));
+        return cpptrace::detail::makeUnique<debug_map_resolver>(object_path);
     }
     #endif
 }

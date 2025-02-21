@@ -2,10 +2,12 @@
 
 #include <cpptrace/basic.hpp>
 #include "symbols/symbols.hpp"
-#include "platform/dbghelp_syminit_manager.hpp"
+#include "platform/dbghelp_utils.hpp"
 #include "binary/object.hpp"
 #include "utils/common.hpp"
 #include "utils/error.hpp"
+#include "utils/utils.hpp"
+#include "options.hpp"
 
 #include <mutex>
 #include <system_error>
@@ -238,6 +240,9 @@ namespace dbghelp {
                     std::size_t sz = sizeof(TI_FINDCHILDREN_PARAMS) +
                                     (n_children) * sizeof(TI_FINDCHILDREN_PARAMS::ChildId[0]);
                     TI_FINDCHILDREN_PARAMS* children = (TI_FINDCHILDREN_PARAMS*) new char[sz];
+                    auto guard = scope_exit([&] {
+                        delete[] (char*) children;
+                    });
                     children->Start = 0;
                     children->Count = n_children;
                     if(
@@ -263,7 +268,6 @@ namespace dbghelp {
                         extent += (i == 0 ? "" : ", ") + resolve_type(children->ChildId[i], proc, modbase);
                     }
                     extent += ")";
-                    delete[] (char*) children;
                     return {return_type.base, extent + return_type.extent};
                 }
             }
@@ -343,7 +347,8 @@ namespace dbghelp {
         // get_frame_object_info()                 0.001-0.002 ms  0.0003-0.0006 ms
         // At some point it might make sense to make an option to control this.
         auto object_frame = get_frame_object_info(addr);
-        const std::lock_guard<std::recursive_mutex> lock(dbghelp_lock); // all dbghelp functions are not thread safe
+        // Dbghelp is is single-threaded, so acquire a lock.
+        auto lock = get_dbghelp_lock();
         alignas(SYMBOL_INFO) char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)];
         SYMBOL_INFO* symbol = (SYMBOL_INFO*)buffer;
         symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
@@ -427,23 +432,18 @@ namespace dbghelp {
     }
 
     std::vector<stacktrace_frame> resolve_frames(const std::vector<frame_ptr>& frames) {
-        const std::lock_guard<std::recursive_mutex> lock(dbghelp_lock); // all dbghelp functions are not thread safe
+        // Dbghelp is is single-threaded, so acquire a lock.
+        auto lock = get_dbghelp_lock();
         std::vector<stacktrace_frame> trace;
         trace.reserve(frames.size());
 
         // TODO: When does this need to be called? Can it be moved to the symbolizer?
         SymSetOptions(SYMOPT_ALLOW_ABSOLUTE_SYMBOLS);
-        HANDLE proc = GetCurrentProcess();
-        if(get_cache_mode() == cache_mode::prioritize_speed) {
-            get_syminit_manager().init(proc);
-        } else {
-            if(!SymInitialize(proc, NULL, TRUE)) {
-                throw internal_error("SymInitialize failed");
-            }
-        }
+
+        auto syminit_info = ensure_syminit();
         for(const auto frame : frames) {
             try {
-                trace.push_back(resolve_frame(proc, frame));
+                trace.push_back(resolve_frame(syminit_info.get_process_handle() , frame));
             } catch(...) { // NOSONAR
                 if(!detail::should_absorb_trace_exceptions()) {
                     throw;
@@ -451,11 +451,6 @@ namespace dbghelp {
                 auto entry = null_frame;
                 entry.raw_address = frame;
                 trace.push_back(entry);
-            }
-        }
-        if(get_cache_mode() != cache_mode::prioritize_speed) {
-            if(!SymCleanup(proc)) {
-                throw internal_error("SymCleanup failed");
             }
         }
         return trace;

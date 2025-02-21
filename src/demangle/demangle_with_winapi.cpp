@@ -1,6 +1,7 @@
 #ifdef CPPTRACE_DEMANGLE_WITH_WINAPI
 
 #include "demangle/demangle.hpp"
+#include "platform/dbghelp_utils.hpp"
 
 #include <string>
 
@@ -12,7 +13,9 @@
 
 namespace cpptrace {
 namespace detail {
-    std::string demangle(const std::string& name) {
+    std::string demangle(const std::string& name, bool) {
+        // Dbghelp is is single-threaded, so acquire a lock.
+        auto lock = get_dbghelp_lock();
         char buffer[500];
         auto ret = UnDecorateSymbolName(name.c_str(), buffer, sizeof(buffer) - 1, 0);
         if(ret == 0) {

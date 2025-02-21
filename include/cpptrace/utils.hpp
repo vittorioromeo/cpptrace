@@ -43,6 +43,12 @@ namespace cpptrace {
     namespace experimental {
         CPPTRACE_EXPORT void set_cache_mode(cache_mode mode);
     }
+
+    // dwarf options
+    namespace experimental {
+        CPPTRACE_EXPORT void set_dwarf_resolver_line_table_cache_size(nullable<std::size_t> max_entries);
+        CPPTRACE_EXPORT void set_dwarf_resolver_disable_aranges(bool disable);
+    }
 }
 
 #endif

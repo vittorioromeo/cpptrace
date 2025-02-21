@@ -7,12 +7,6 @@ set(
   ${warning_options} $<$<CXX_COMPILER_ID:GNU>:-Wno-infinite-recursion>
 )
 
-set(
-  debug
-  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g>
-  $<$<CXX_COMPILER_ID:MSVC>:/DEBUG>
-)
-
 macro(add_test_dependencies exec_name)
   target_compile_features(${exec_name} PRIVATE cxx_std_11)
   target_link_libraries(${exec_name} PRIVATE ${target_name})
@@ -25,9 +19,11 @@ macro(add_test_dependencies exec_name)
     target_compile_options(${exec_name} PRIVATE -gdwarf-${CPPTRACE_BUILD_TESTING_DWARF_VERSION})
   endif()
   # Clang has been fast to adopt dwarf 5, other tools (e.g. addr2line from binutils) have not
-  check_cxx_compiler_flag("-gdwarf-4" HAS_DWARF4)
-  if(HAS_DWARF4)
-    target_compile_options(${exec_name} PRIVATE "$<$<CONFIG:Debug>:-gdwarf-4>")
+  if(NOT CPPTRACE_BUILD_NO_SYMBOLS)
+    check_cxx_compiler_flag("-gdwarf-4" HAS_DWARF4)
+    if(HAS_DWARF4)
+      target_compile_options(${exec_name} PRIVATE "$<$<CONFIG:Debug>:-gdwarf-4>")
+    endif()
   endif()
   # TODO: add debug info for mingw clang?
   if(CPPTRACE_BUILD_TEST_RDYNAMIC)
@@ -81,12 +77,19 @@ if(NOT CPPTRACE_SKIP_UNIT)
   add_executable(
     unittest
     unit/main.cpp
-    unit/raw_trace.cpp
-    unit/object_trace.cpp
-    unit/stacktrace.cpp
-    unit/from_current.cpp
-    unit/from_current_z.cpp
-    unit/traced_exception.cpp
+    unit/tracing/raw_trace.cpp
+    unit/tracing/object_trace.cpp
+    unit/tracing/stacktrace.cpp
+    unit/tracing/from_current.cpp
+    unit/tracing/from_current_z.cpp
+    unit/tracing/traced_exception.cpp
+    unit/internals/optional.cpp
+    unit/internals/lru_cache.cpp
+    unit/internals/result.cpp
+    unit/internals/string_utils.cpp
+    unit/internals/general.cpp
+    unit/lib/formatting.cpp
+    unit/lib/nullable.cpp
   )
   target_compile_features(unittest PRIVATE cxx_std_20)
   target_link_libraries(unittest PRIVATE ${target_name} GTest::gtest_main GTest::gmock_main)
@@ -101,5 +104,9 @@ if(NOT CPPTRACE_SKIP_UNIT)
   if(CPPTRACE_SANITIZER_BUILD)
     target_compile_definitions(unittest PRIVATE CPPTRACE_SANITIZER_BUILD)
   endif()
+  if(CPPTRACE_BUILD_NO_SYMBOLS)
+    target_compile_definitions(unittest PRIVATE CPPTRACE_BUILD_NO_SYMBOLS)
+  endif()
+  target_include_directories(unittest PRIVATE ../src)
   add_test(NAME unittest COMMAND unittest)
 endif()

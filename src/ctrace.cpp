@@ -107,7 +107,7 @@ CTRACE_FORMAT_EPILOGUE
         new_frame.line      = frame.line.value_or(invalid_pos);
         new_frame.column    = frame.column.value_or(invalid_pos);
         new_frame.filename  = generate_owning_string(frame.filename).data;
-        new_frame.symbol    = generate_owning_string(cpptrace::detail::demangle(frame.symbol)).data;
+        new_frame.symbol    = generate_owning_string(cpptrace::detail::demangle(frame.symbol, true)).data;
         new_frame.is_inline = ctrace_bool(frame.is_inline);
         return new_frame;
     }
@@ -310,8 +310,12 @@ extern "C" {
         cpptrace::get_safe_object_frame(address, reinterpret_cast<cpptrace::safe_object_frame*>(out));
     }
 
-    ctrace_bool can_signal_safe_unwind() {
+    ctrace_bool ctrace_can_signal_safe_unwind() {
         return cpptrace::can_signal_safe_unwind();
+    }
+
+    ctrace_bool ctrace_can_get_safe_object_frame(void) {
+        return cpptrace::can_get_safe_object_frame();
     }
 
     // ctrace::io:

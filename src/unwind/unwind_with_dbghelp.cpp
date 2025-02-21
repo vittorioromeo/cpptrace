@@ -4,12 +4,14 @@
 #include "unwind/unwind.hpp"
 #include "utils/common.hpp"
 #include "utils/utils.hpp"
-#include "platform/dbghelp_syminit_manager.hpp"
+#include "platform/dbghelp_utils.hpp"
 
 #include <vector>
-#include <mutex>
 #include <cstddef>
 
+#ifndef WIN32_LEAN_AND_MEAN
+ #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <dbghelp.h>
 
@@ -96,27 +98,19 @@ namespace detail {
         std::vector<frame_ptr> trace;
 
         // Dbghelp is is single-threaded, so acquire a lock.
-        static std::mutex mutex;
-        std::lock_guard<std::mutex> lock(mutex);
+        auto lock = get_dbghelp_lock();
         // For some reason SymInitialize must be called before StackWalk64
         // Note that the code assumes that
         // SymInitialize( GetCurrentProcess(), NULL, TRUE ) has
         // already been called.
         //
-        HANDLE proc = GetCurrentProcess();
+        auto syminit_info = ensure_syminit();
         HANDLE thread = GetCurrentThread();
-        if(get_cache_mode() == cache_mode::prioritize_speed) {
-            get_syminit_manager().init(proc);
-        } else {
-            if(!SymInitialize(proc, NULL, TRUE)) {
-                throw internal_error("SymInitialize failed");
-            }
-        }
         while(trace.size() < max_depth) {
             if(
                 !StackWalk64(
                     machine_type,
-                    proc,
+                    syminit_info.get_process_handle(),
                     thread,
                     &frame,
                     machine_type == IMAGE_FILE_MACHINE_I386 ? NULL : &context,
@@ -142,11 +136,6 @@ namespace detail {
             } else {
                 // base
                 break;
-            }
-        }
-        if(get_cache_mode() != cache_mode::prioritize_speed) {
-            if(!SymCleanup(proc)) {
-                throw internal_error("SymCleanup failed");
             }
         }
         return trace;
