@@ -20,7 +20,7 @@
 #include <backtrace.h>
 #endif
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
 namespace libbacktrace {
     int full_callback(void* data, std::uintptr_t address, const char* file, int line, const char* symbol) {
@@ -66,7 +66,7 @@ namespace libbacktrace {
     // TODO: Handle backtrace_pcinfo calling the callback multiple times on inlined functions
     stacktrace_frame resolve_frame(const frame_ptr addr) {
         try {
-            stacktrace_frame frame = null_frame;
+            stacktrace_frame frame = null_frame();
             frame.raw_address = addr;
             backtrace_pcinfo(
                 get_backtrace_state(),
@@ -87,10 +87,8 @@ namespace libbacktrace {
             }
             return frame;
         } catch(...) { // NOSONAR
-            if(!should_absorb_trace_exceptions()) {
-                throw;
-            }
-            return null_frame;
+            detail::log_and_maybe_propagate_exception(std::current_exception());
+            return null_frame();
         }
     }
 
@@ -104,6 +102,6 @@ namespace libbacktrace {
     }
 }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

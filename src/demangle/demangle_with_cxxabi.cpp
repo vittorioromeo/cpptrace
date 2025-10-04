@@ -11,7 +11,7 @@
 #include <functional>
 #include <string>
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     std::string demangle(const std::string& name, bool check_prefix) {
         // https://itanium-cxx-abi.github.io/cxx-abi/abi.html#demangler
@@ -56,6 +56,6 @@ namespace detail {
         }
     }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

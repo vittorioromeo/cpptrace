@@ -5,10 +5,13 @@
 <br/>
 [![Community Discord Link](https://img.shields.io/badge/Chat%20on%20the%20(very%20small)-Community%20Discord-blue?labelColor=2C3239&color=7289DA&style=flat&logo=discord&logoColor=959DA5)](https://discord.gg/frjaAZvqUZ)
 <br/>
-[![Try on Compiler Explorer](https://img.shields.io/badge/-Compiler%20Explorer-brightgreen?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAQCAYAAAAmlE46AAAACXBIWXMAAACwAAAAsAEUaqtpAAABSElEQVQokYVTsU7DMBB9QMTCEJbOMLB5oF0tRfUPIPIJZctYJkZYu3WMxNL+ARUfQKpImcPgDYnsXWBgYQl61TkYyxI3Wef37j3fnQ/6vkcsikY9AbiWq0mpbevDBmLRqDEAA4CEHMADgFRwrwDmch6X2i73RCFVHvC/WCeCMAFpC2AFoPPu5x4md4rnAN4luS61nYWSgauNU8ydkr0bLTMYAoIYtWqxM4LtEumeERDtfUjlMDrp7L67iddyyJtOvUIu2rquVn4iiVSOKXYhiMSJWLwUJZLuQ2CWmVldV4MT11UmXgB8fr0dX3WP6VHMiVrscim6Da2mJxffzwSU2v6xWzSKmzQ4cUTOaCBTvWgU14xkzjhckKm/q3wnrRAcAhksxMZNAdxEf0fRKI6E8zqT1C0X28ccRpqAUltW5pu4sxv5Mb8B4AciE3bHMxz/+gAAAABJRU5ErkJggg==&labelColor=2C3239&style=flat&label=Try+it+on&color=30C452)](https://godbolt.org/z/c6TqTzqcf)
+[![Try on Compiler Explorer](https://img.shields.io/badge/-Compiler%20Explorer-brightgreen?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAQCAYAAAAmlE46AAAACXBIWXMAAACwAAAAsAEUaqtpAAABSElEQVQokYVTsU7DMBB9QMTCEJbOMLB5oF0tRfUPIPIJZctYJkZYu3WMxNL+ARUfQKpImcPgDYnsXWBgYQl61TkYyxI3Wef37j3fnQ/6vkcsikY9AbiWq0mpbevDBmLRqDEAA4CEHMADgFRwrwDmch6X2i73RCFVHvC/WCeCMAFpC2AFoPPu5x4md4rnAN4luS61nYWSgauNU8ydkr0bLTMYAoIYtWqxM4LtEumeERDtfUjlMDrp7L67iddyyJtOvUIu2rquVn4iiVSOKXYhiMSJWLwUJZLuQ2CWmVldV4MT11UmXgB8fr0dX3WP6VHMiVrscim6Da2mJxffzwSU2v6xWzSKmzQ4cUTOaCBTvWgU14xkzjhckKm/q3wnrRAcAhksxMZNAdxEf0fRKI6E8zqT1C0X28ccRpqAUltW5pu4sxv5Mb8B4AciE3bHMxz/+gAAAABJRU5ErkJggg==&labelColor=2C3239&style=flat&label=Try+it+on&color=30C452)](https://godbolt.org/z/aP8PsxxeY)
 
-Cpptrace is a simple and portable C++ stacktrace library supporting C++11 and greater on Linux, macOS,
-and Windows including MinGW and Cygwin environments. The goal: Make stack traces simple for once.
+Cpptrace is a simple and portable C++ stacktrace library supporting C++11 and greater on Linux, macOS, and Windows
+including MinGW and Cygwin environments. The goal: Make stack traces simple for once.
+
+In addition to providing access to stack traces, cpptrace also provides a mechanism for getting stacktraces from thrown
+exceptions which is immensely valuable for debugging and triaging. More info [below](#traces-from-all-exceptions-cpptrace_try-and-cpptrace_catch).
 
 Cpptrace also has a C API, docs [here](docs/c-api.md).
 
@@ -16,9 +19,6 @@ Cpptrace also has a C API, docs [here](docs/c-api.md).
 
 - [30-Second Overview](#30-second-overview)
   - [CMake FetchContent Usage](#cmake-fetchcontent-usage)
-- [FAQ](#faq)
-  - [What about C++23 `<stacktrace>`?](#what-about-c23-stacktrace)
-  - [What does cpptrace have over other C++ stacktrace libraries?](#what-does-cpptrace-have-over-other-c-stacktrace-libraries)
 - [Prerequisites](#prerequisites)
 - [Basic Usage](#basic-usage)
 - [`namespace cpptrace`](#namespace-cpptrace)
@@ -27,11 +27,16 @@ Cpptrace also has a C API, docs [here](docs/c-api.md).
   - [Raw Traces](#raw-traces)
   - [Utilities](#utilities)
   - [Formatting](#formatting)
+    - [Transforms](#transforms)
   - [Configuration](#configuration)
-  - [Traces From All Exceptions](#traces-from-all-exceptions)
+    - [Logging](#logging)
+  - [Traces From All Exceptions (`CPPTRACE_TRY` and `CPPTRACE_CATCH`)](#traces-from-all-exceptions-cpptrace_try-and-cpptrace_catch)
     - [Removing the `CPPTRACE_` prefix](#removing-the-cpptrace_-prefix)
     - [How it works](#how-it-works)
     - [Performance](#performance)
+  - [Rethrowing Exceptions](#rethrowing-exceptions)
+  - [`cpptrace::try_catch`](#cpptracetry_catch)
+  - [Traces from SEH exceptions](#traces-from-seh-exceptions)
   - [Traced Exception Objects](#traced-exception-objects)
     - [Wrapping std::exceptions](#wrapping-stdexceptions)
     - [Exception handling with cpptrace exception objects](#exception-handling-with-cpptrace-exception-objects)
@@ -40,6 +45,9 @@ Cpptrace also has a C API, docs [here](docs/c-api.md).
   - [Utility Types](#utility-types)
   - [Headers](#headers)
   - [Libdwarf Tuning](#libdwarf-tuning)
+  - [JIT Support](#jit-support)
+  - [Loading Libraries at Runtime](#loading-libraries-at-runtime)
+- [ABI Versioning](#abi-versioning)
 - [Supported Debug Formats](#supported-debug-formats)
 - [How to Include The Library](#how-to-include-the-library)
   - [CMake FetchContent](#cmake-fetchcontent)
@@ -50,6 +58,7 @@ Cpptrace also has a C API, docs [here](docs/c-api.md).
   - [Package Managers](#package-managers)
     - [Conan](#conan)
     - [Vcpkg](#vcpkg)
+  - [C++20 Modules](#c20-modules)
 - [Platform Logistics](#platform-logistics)
   - [Windows](#windows)
   - [macOS](#macos)
@@ -57,6 +66,10 @@ Cpptrace also has a C API, docs [here](docs/c-api.md).
   - [Summary of Library Configurations](#summary-of-library-configurations)
 - [Testing Methodology](#testing-methodology)
 - [Notes About the Library](#notes-about-the-library)
+- [FAQ](#faq)
+  - [What about C++23 `<stacktrace>`?](#what-about-c23-stacktrace)
+  - [What does cpptrace have over other C++ stacktrace libraries?](#what-does-cpptrace-have-over-other-c-stacktrace-libraries)
+  - [I'm getting undefined standard library symbols like `std::__1::basic_string` on MacOS](#im-getting-undefined-standard-library-symbols-like-std__1basic_string-on-macos)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -78,8 +91,8 @@ Cpptrace can also retrieve function inlining information on optimized release bu
 
 ![Inlining](res/inlining.png)
 
-Cpptrace provides access to resolved stack traces as well as lightweight raw traces (just addresses) that can be
-resolved later:
+Cpptrace provides access to resolved stack traces as well as fast and lightweight raw traces (just addresses) that can
+be resolved later:
 
 ```cpp
 const auto raw_trace = cpptrace::generate_raw_trace();
@@ -87,13 +100,17 @@ const auto raw_trace = cpptrace::generate_raw_trace();
 raw_trace.resolve().print();
 ```
 
-Cpptrace provides a way to produce stack traces on arbitrary exceptions. More information on this system
-[below](#traces-from-all-exceptions).
+One of the most important features cpptrace offers is the ability to retrieve stack traces on arbitrary exceptions.
+More information on this system [below]((#traces-from-all-exceptions-cpptrace_try-and-cpptrace_catch)).
 ```cpp
 #include <cpptrace/from_current.hpp>
+#include <iostream>
+#include <stdexcept>
+
 void foo() {
     throw std::runtime_error("foo failed");
 }
+
 int main() {
     CPPTRACE_TRY {
         foo();
@@ -105,9 +122,6 @@ int main() {
 ```
 
 ![from_current](res/from_current.png)
-
-There are a few extraneous frames at the top of the stack corresponding to internals of exception handling in the
-standard library. These are a small price to pay for stack traces on all exceptions.
 
 Cpptrace also provides a handful of traced exception objects that store stack traces when thrown. This is useful when
 the exceptions might not be caught by `CPPTRACE_CATCH`:
@@ -126,8 +140,9 @@ Additional notable features:
 - Utilities for demangling
 - Utilities for catching `std::exception`s and wrapping them in traced exceptions
 - Signal-safe stack tracing
+  - As far as I can tell cpptrace is the only library which can truly do this in a signal-safe manner
 - Source code snippets in traces
-- Extensive configuration options for [trace formatting](#formatting)
+- Extensive configuration options for [trace formatting](#formatting) and pretty-printing
 
 ![Snippets](res/snippets.png)
 
@@ -138,7 +153,7 @@ include(FetchContent)
 FetchContent_Declare(
   cpptrace
   GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
-  GIT_TAG        v0.8.1 # <HASH or TAG>
+  GIT_TAG        v1.0.4 # <HASH or TAG>
 )
 FetchContent_MakeAvailable(cpptrace)
 target_link_libraries(your_target cpptrace::cpptrace)
@@ -162,33 +177,6 @@ On macOS it is recommended to generate a `.dSYM` file, see [Platform Logistics](
 
 For other ways to use the library, such as through package managers, a system-wide installation, or on a platform
 without internet access see [How to Include The Library](#how-to-include-the-library) below.
-
-# FAQ
-
-## What about C++23 `<stacktrace>`?
-
-Some day C++23's `<stacktrace>` will be ubiquitous. And maybe one day the msvc implementation will be acceptable.
-The original motivation for cpptrace was to support projects using older C++ standards and as the library has grown its
-functionality has extended beyond the standard library's implementation.
-
-Cpptrace provides functionality beyond what the standard library provides and what implementations provide, such as:
-- Walking inlined function calls
-- Providing a lightweight interface for "raw traces"
-- Resolving function parameter types
-- Providing traced exception objects
-- Providing an API for signal-safe stacktrace generation
-- Providing a way to retrieve stack traces from arbitrary exceptions, not just special cpptrace traced exception
-  objects. This is a feature coming to C++26, but cpptrace provides a solution for C++11.
-
-## What does cpptrace have over other C++ stacktrace libraries?
-
-Other C++ stacktrace libraries, such as boost stacktrace and backward-cpp, fall short when it comes to portability and
-ease of use. In testing, I found neither to provide adaquate coverage of various environments. Even when they can be
-made to work in an environment they require manual configuration from the end-user, possibly requiring manual
-installation of third-party dependencies. This is a highly undesirable burden to impose on users, especially when it is
-for a software package which just provides diagnostics as opposed to core functionality. Additionally, cpptrace provides
-support for resolving inlined calls by default for DWARF symbols (boost does not do this, backward-cpp can do this but
-only for some back-ends), better support for resolving full function signatures, and nicer API, among other features.
 
 # Prerequisites
 
@@ -315,8 +303,17 @@ namespace cpptrace {
 
 ## Utilities
 
-`cpptrace::demangle` provides a helper function for name demangling, since it has to implement that helper internally
-anyways.
+`cpptrace::demangle` is a helper function for name demangling, since it has to implement that helper internally anyways.
+
+`cpptrace::basename` is a helper for custom formatters that extracts a base file name from a path.
+
+`cpptrace::prettify_symbol` is a helper for custom formatters that applies a number of transformations to clean up long
+symbol names. For example, it turns `std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >`
+into `std::string`.
+
+`cpptrace::prune_symbol` is a helper for custom formatters that prunes demangled symbols by removing return types,
+template arguments, and function parameters. It also does some minimal normalization. For example, it prunes
+`ns::S<int, float>::~S()` to `ns::S::~S`. If cpptrace is unable to parse the symbol it will return the original symbol.
 
 `cpptrace::get_snippet` gets a text snippet, if possible, from for the given source file for +/- `context_size` lines
 around `line`.
@@ -329,12 +326,27 @@ stack trace from a cpptrace exception (more info below) and otherwise behaves li
 ```cpp
 namespace cpptrace {
     std::string demangle(const std::string& name);
+
+    std::string basename(const std::string& path);
+
+    std::string prettify_symbol(std::string symbol);
+    std::string prune_symbol(const std::string& symbol);
+
     std::string get_snippet(
         const std::string& path,
         std::size_t line,
         std::size_t context_size,
         bool color = false
     );
+
+    std::string get_snippet(
+        const std::string& path,
+        std::size_t line,
+        nullable<std::uint32_t> column,
+        std::size_t context_size,
+        bool color = false
+    );
+
     bool isatty(int fd);
 
     extern const int stdin_fileno;
@@ -372,8 +384,13 @@ namespace cpptrace {
         formatter& snippets(bool);
         formatter& snippet_context(int);
         formatter& columns(bool);
+        enum class symbol_mode { full, pretty, pruned };
+        formatter& symbols(symbol_mode);
         formatter& filtered_frame_placeholders(bool);
         formatter& filter(std::function<bool(const stacktrace_frame&)>);
+        formatter& transform(std::function<stacktrace_frame(stacktrace_frame)>);
+        formatter& break_before_filename(bool do_break = true);
+        formatter& hide_exception_machinery(bool do_hide = true);
 
         std::string format(const stacktrace_frame&) const;
         std::string format(const stacktrace_frame&, bool color) const;
@@ -399,22 +416,35 @@ namespace cpptrace {
 ```
 
 Options:
-| Setting                       | Description                                                    | Default                                                                  |
-| ----------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `header`                      | Header line printed before the trace                           | `Stack trace (most recent call first):`                                  |
-| `colors`                      | Default color mode for the trace                               | `automatic`, which attempts to detect if the target stream is a terminal |
-| `addresses`                   | Raw addresses, object addresses, or no addresses               | `raw`                                                                    |
-| `paths`                       | Full paths or just filenames                                   | `full`                                                                   |
-| `snippets`                    | Whether to include source code snippets                        | `false`                                                                  |
-| `snippet_context`             | How many lines of source context to show in a snippet          | `2`                                                                      |
-| `columns`                     | Whether to include column numbers if present                   | `true`                                                                   |
-| `filtered_frame_placeholders` | Whether to still print filtered frames as just `#n (filtered)` | `true`                                                                   |
-| `filter`                      | A predicate to filter frames with                              | None                                                                     |
+| Setting                       | Description                                                        | Default                                                                  |
+| ----------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `header`                      | Header line printed before the trace                               | `Stack trace (most recent call first):`                                  |
+| `colors`                      | Default color mode for the trace                                   | `automatic`, which attempts to detect if the target stream is a terminal |
+| `addresses`                   | Raw addresses, object addresses, or no addresses                   | `raw`                                                                    |
+| `paths`                       | Full paths or just filenames                                       | `full`                                                                   |
+| `snippets`                    | Whether to include source code snippets                            | `false`                                                                  |
+| `snippet_context`             | How many lines of source context to show in a snippet              | `2`                                                                      |
+| `columns`                     | Whether to include column numbers if present                       | `true`                                                                   |
+| `symbols`                     | Full demangled symbols, pruned symbol names, or prettified symbols | `full`                                                                   |
+| `filtered_frame_placeholders` | Whether to still print filtered frames as just `#n (filtered)`     | `true`                                                                   |
+| `filter`                      | A predicate to filter frames with                                  | None                                                                     |
+| `transform`                   | A transformer which takes a stacktrace frame and modifies it       | None                                                                     |
+| `break_before_filename`       | Print symbol and line source location on different lines           | `false`                                                                  |
+| `hide_exception_machinery`    | Hide exception internals for current exception traces              | `true`                                                                   |
 
 The `automatic` color mode attempts to detect if a stream that may be attached to a terminal. As such, it will not use
 colors for the `formatter::format` method and it may not be able to detect if some ostreams correspond to terminals or
 not. For this reason, `formatter::format` and `formatter::print` methods have overloads taking a color parameter. This
 color parameter will override configured color mode.
+
+The `symbols` option provides a few settings for pretty-printing symbol names:
+- `symbol_mode::full` default, uses the full demangled name
+- `symbol_mode::pretty` applies a number of transformations to clean up long symbol names. For example, it turns
+  `std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >` into `std::string`. This is
+  equivalent to `cpptrace::prettify_symbol`.
+- `symbol_mode::pruned` prunes demangled symbols by removing return types, template arguments, and function parameters.
+  It also does some minimal normalization. For example, it prunes `ns::S<int, float>::~S()` to `ns::S::~S`. If cpptrace
+  is unable to parse the symbol it will use the full symbol. This is equivalent to `cpptrace::prune_symbol`.
 
 Recommended practice with formatters: It's generally preferable to create formatters objects that are long-lived rather
 than to create them on the fly every time a trace needs to be formatted.
@@ -424,6 +454,19 @@ Cpptrace provides access to a formatter with default settings with `get_default_
 namespace cpptrace {
     const formatter& get_default_formatter();
 }
+```
+
+### Transforms
+
+A transform function can be specified for the formatter. This function is called before the configured `filter` is
+checked. For example:
+
+```cpp
+auto formatter = cpptrace::formatter{}
+    .transform([](cpptrace::stacktrace_frame frame) {
+        frame.symbol = replace_all(frame, "std::__cxx11::", "std::");
+        return frame;
+    });
 ```
 
 ## Configuration
@@ -458,13 +501,38 @@ namespace cpptrace {
 }
 ```
 
-## Traces From All Exceptions
+### Logging
+
+Cpptrace attempts to gracefully recover from any internal errors in order to provide the best information it can and not
+interfere with user applications. However, sometimes it's important to see what's going wrong inside cpptrace if
+anything does go wrong. To facilitate this, cpptrace has an internal logger. By default it doesn't log anything out. The
+following configurations that can be used to set a custom logging callback or enable logging to stderr:
+
+```cpp
+namespace cpptrace {
+    enum class log_level { debug, info, warning, error };
+    void set_log_level(log_level level);
+    void set_log_callback(std::function<void(log_level, const char*)>);
+    void use_default_stderr_logger();
+}
+```
+
+`cpptrace::set_log_level`: Set cpptrace's internal log level. Default: `error`. Cpptrace currently only uses this log
+level internally.
+
+`cpptrace::set_log_callback`: Set the callback cpptrace uses for logging messages, useful for custom loggers.
+
+`cpptrace::use_default_stderr_logger`: Set's the logging callback to print to stderr.
+
+## Traces From All Exceptions (`CPPTRACE_TRY` and `CPPTRACE_CATCH`)
 
 Cpptrace provides `CPPTRACE_TRY` and `CPPTRACE_CATCH` macros that allow a stack trace to be collected from the current
-thrown exception object, with minimal or no overhead in the non-throwing path:
+thrown exception object, with no overhead in the non-throwing (happy) path:
 
 ```cpp
 #include <cpptrace/from_current.hpp>
+#include <iostream>
+
 void foo() {
     throw std::runtime_error("foo failed");
 }
@@ -481,42 +549,38 @@ int main() {
 This functionality is entirely opt-in, to access this use `#include <cpptrace/from_current.hpp>`.
 
 Any declarator `catch` accepts works with `CPPTRACE_CATCH`, including `...`. This works with any thrown object, not just
-`std::exceptions`, it even works with `throw 0;`
+`std::exceptions`. It even works with `throw 0;`!
 
 ![from_current](res/from_current.png)
-
-There are a few extraneous frames at the top of the stack corresponding to standard library exception handling
-internals. These are a small price to pay for stack traces on all exceptions.
 
 API functions:
 - `cpptrace::raw_trace_from_current_exception`: Returns `const raw_trace&` from the current exception.
 - `cpptrace::from_current_exception`: Returns a resolved `const stacktrace&` from the current exception. Invalidates
   references to traces returned by `cpptrace::raw_trace_from_current_exception`.
 
-There is a performance tradeoff with this functionality: Either the try-block can be zero overhead in the
-non-throwing path with potential expense in the throwing path, or the try-block can have very minimal overhead
-in the non-throwing path due to bookkeeping with guarantees about the expense of the throwing path. More details on
-this tradeoff [below](#performance). Cpptrace provides macros for both sides of this tradeoff:
-- `CPPTRACE_TRY`/`CPPTRACE_CATCH`: Minimal overhead in the non-throwing path (one `mov` on x86, and this may be
-  optimized out if the compiler is able)
-- `CPPTRACE_TRYZ`/`CPPTRACE_CATCHZ`: Zero overhead in the non-throwing path, potential extra cost in the throwing path
+In order to provide stack traces, cpptrace has to do some magic to be able to intercept C++ exception handling internals
+before the stack is unwound. For a simple `try`/`catch`, `CPPTRACE_TRY`/`CPPTRACE_CATCH` macros can be used. For a
+`try`/`catch` that has multiple handlers, `cpptrace::try_catch` can be used. I wish I could make a macro work, however,
+for multiple handlers this is the best way for cpptrace to inject the appropriate magic. E.g.:
 
-Note: It's important to not mix the `Z` variants with the non-`Z` variants.
-
-Unfortunately the try/catch macros are needed to insert some magic to perform a trace during the unwinding search phase.
-In order to have multiple catch alternatives, either `CPPTRACE_CATCH_ALT` or a normal `catch` must be used:
 ```cpp
-CPPTRACE_TRY {
-    foo();
-} CPPTRACE_CATCH(const std::exception&) { // <- First catch must be CPPTRACE_CATCH
-    // ...
-} CPPTRACE_CATCH_ALT(const std::exception&) { // <- Ok
-    // ...
-} catch(const std::exception&) { // <- Also Ok
-    // ...
-} CPPTRACE_CATCH(const std::exception&) { // <- Not Ok
-    // ...
-}
+cpptrace::try_catch(
+    [&] { // try block
+        foo();
+    },
+    [&] (const std::runtime_error& e) {
+        std::cerr<<"Runtime error: "<<e.what()<<std::endl;
+        cpptrace::from_current_exception().print();
+    },
+    [&] (const std::exception& e) {
+        std::cerr<<"Exception: "<<e.what()<<std::endl;
+        cpptrace::from_current_exception().print();
+    },
+    [&] () { // serves the same role as `catch(...)`, an any exception handler
+        std::cerr<<"Unknown exception occurred: "<<std::endl;
+        cpptrace::from_current_exception().print();
+    }
+);
 ```
 
 Note: The current exception is the exception most recently seen by a cpptrace try-catch macro block.
@@ -534,6 +598,40 @@ CPPTRACE_TRY {
     cpptrace::from_current_exception().print(); // the trace for std::runtime_error("bar"), again
 }
 ```
+
+Note: Internally the trace contains some extra frames for calls like `__cxa_throw`, `_UnwindRaiseException`, etc. These
+are filtered out during stacktrace printing but they will be present if you manually inspect the vector of stacktrace
+frames.
+
+> [!IMPORTANT]
+> There is an unfortunate limitation with `return` statements in these try/catch macros: The implementation on Windows
+> requires wrapping the try body in an immediately-invoked lambda and as such `return` statements would return from the
+> lambda not the enclosing function. Cpptrace guards against misleading `return`s compiling by requiring the lambdas to
+> return a special internal type, but, if you're writing code that will be compiled on windows it's important to not
+> write `return` statements within CPPTRACE_TRY. For example, this is invalid:
+> ```cpp
+> CPPTRACE_TRY {
+>     if(condition) return 40; // error, type int doesn't match cpptrace::detail::dont_return_from_try_catch_macros
+> } CPPTRACE_CATCH(const std::exception& e) {
+>     ...
+> }
+> ```
+
+> [!IMPORTANT]
+> There is a footgun which is mainly relevant for code that was written on an older version of cpptrace: It's possible
+> to write the following without getting errors
+> ```cpp
+> CPPTRACE_TRY {
+>     ...
+> } CPPTRACE_CATCH(const std::runtime_error& e) {
+>     ...
+> } catch(const std::exception& e) {
+>     ...
+> }
+> ```
+> This code will compile and the second catch handler will work, however, cpptrace won't know about the handler and as
+> such it won't be able to correctly collect a trace when a type that does not match `std::runtime_error` is thrown. No
+> run-time errors will occur, however, `from_current_exception` will report a misleading trace.
 
 ### Removing the `CPPTRACE_` prefix
 
@@ -555,59 +653,274 @@ are common macro names, you can easily modify the following snippet to provide y
 ```cpp
 #define TRY CPPTRACE_TRY
 #define CATCH(param) CPPTRACE_CATCH(param)
-#define TRYZ CPPTRACE_TRYZ
-#define CATCHZ(param) CPPTRACE_CATCHZ(param)
-#define CATCH_ALT(param) CPPTRACE_CATCH_ALT(param)
 ```
 
 ### How it works
 
 C++ does not provide any language support for collecting stack traces when exceptions are thrown, however, exception
-handling under both the Itanium ABI and by SEH (used to implement C++ exceptions on windows) involves unwinding the
+handling under both the Itanium ABI and by SEH (used to implement C++ exceptions on Windows) involves unwinding the
 stack twice. The first unwind searches for an appropriate `catch` handler, the second actually unwinds the stack and
 calls destructors. Since the stack remains intact during the search phase it's possible to collect a stack trace with
 little to no overhead when the `catch` is considered for matching the exception. The try/catch macros for cpptrace set
 up a special try/catch system that can collect a stack trace when considered during a search phase.
 
+On Windows, cpptrace's try/catch macros expand along the lines of:
+<table>
+<thead>
+<tr>
+<td>
+Source
+</td>
+<td>
+Expansion
+</td>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+
+```cpp
+CPPTRACE_TRY {
+    foo();
+} CPPTRACE_CATCH(const std::exception& e) {
+    ...
+}
+```
+
+</td>
+<td>
+
+```cpp
+try {
+    [&]() {
+        __try {
+            [&]() {
+                foo();
+            }();
+        } __except(exception_filter<const std::exception&>(
+            GetExceptionInformation()
+        )) {}
+    }();
+} catch(const std::exception& e) {
+    ...
+}
+```
+
+</td>
+</tr>
+</tbody>
+</table>
+
+SEH's design actually makes it fairly easy to run code during the search phase. The exception filter will collect a
+trace if it detects the catch will match. Unfortunately, MSVC does not allow mixing C++ `try`/`catch` and SEH
+`__try`/`__except` in the same function so a double-IILE is needed. This has implications for returning from try blocks.
+
+On systems which use the Itanium ABI (linux, mac, etc), cpptrace's try/catch macros expand along the lines of:
+<table>
+<thead>
+<tr>
+<td>
+Source
+</td>
+<td>
+Expansion
+</td>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+
+```cpp
+CPPTRACE_TRY {
+    foo();
+} CPPTRACE_CATCH(const std::exception& e) {
+    ...
+}
+```
+
+</td>
+<td>
+
+```cpp
+try {
+    try {
+        foo();
+    } catch(const unwind_interceptor_for<const std::exception&>&) {...}
+} catch(const std::exception& e) {
+    ...
+}
+```
+
+</td>
+</tr>
+</tbody>
+</table>
+
+Cpptrace does some magic to hook vtables of `unwind_interceptor_for<T>` type_info objects during static-init time.
+
 N.b.: This mechanism is also discussed in [P2490R3][P2490R3].
 
 ### Performance
 
-The fundamental mechanism for this functionality is generating a trace when a catch block is considered during an
-exception handler search phase. Internally a lightweight raw trace is generated upon consideration, which is quite
-fast. This raw trace is only resolved when `cpptrace::from_current_exception` is called, or when the user manually
-resolves a trace from `cpptrace::raw_trace_from_current_exception`.
+The performance impact in the non-throwing happy path is zero (or as close to zero as practical) on modern
+architectures.
 
-It's tricky, however, from the library's standpoint to check if the catch will end up matching. The library could simply
-generate a trace every time a `CPPTRACE_CATCH` is considered, however, in a deep nesting of catch's, e.g. as a result of
-recusion, where a matching handler is not found quickly this could introduce a non-trivial cost in the throwing pat due
-to tracing the stack multiple times. Thus, there is a performance tradeoff between a little book keeping to prevent
-duplicate tracing or biting the bullet, so to speak, in the throwing path and unwinding multiple times.
+In the unhappy throwing path, a little more work may be done during the search phase to consider handlers cpptrace
+inserts but this is low-impact. Generating the trace itself is fast: Cpptrace collects a raw trace during exception
+handling and it is resolved only when requested. In my benchmarking I have found generation of raw traces to take on the
+order of `100ns` per frame.
 
-> [!TIP]
-> The choice between the `Z` and non-`Z` (zero-overhead and non-zero-overhead) variants of the exception handlers should
-> not matter 99% of the time, however, both are provided in the rare case that it does.
->
-> `CPPTRACE_TRY`/`CPPTRACE_CATCH` could only hurt performance if used in a hot loop where the compiler can't optimize
-> away the internal bookkeeping, otherwise the bookkeeping should be completely negligible.
->
-> `CPPTRACE_TRYZ`/`CPPTRACE_CATCHZ` could only hurt performance when there is an exceptionally deep nesting of exception
-> handlers in a call stack before a matching handler.
+On some older architectures/ABIs (e.g., 32-bit windows), `try`/`catch` itself has some overhead due to how it is
+implemented with SEH. Cpptrace's `try`/`catch` macro adds one extra layer of handler which may be relevant on such
+systems but should not be a problem outside of hot loops, where using any `try`/`catch` is presumably already a problem
+on such architectures.
 
-More information on performance considerations with the zero-overhead variant:
+## Rethrowing Exceptions
 
-Tracing the stack multiple times in throwing paths should not matter for the vast majority applications given that:
-1. Performance very rarely is critical in throwing paths and exceptions should be exceptionally rare
-2. Exception handling is not usually used in such a way that you could have a deep nesting of handlers before finding a
-   matching handler
-3. Most call stacks are fairly shallow
+By default `cpptrace::from_current_exception` will correspond to a trace for the last `throw` intercepted by a
+`CPPTRACE_CATCH`. In order to rethrow an exception while preserving the original trace, `cpptrace::rethrow()` can be
+used.
 
-To put the scale of this performance consideration into perspective: In my benchmarking I have found generation of raw
-traces to take on the order of `100ns` per frame. Thus, even if there were 100 non-matching handlers before a matching
-handler in a 100-deep call stack the total time would stil be on the order of one millisecond.
+```cpp
+namespace cpptrace {
+    void rethrow();
+    void rethrow(std::exception_ptr exception = std::current_exception());
+}
+```
 
-Nonetheless, I chose a default bookkeeping behavior for `CPPTRACE_TRY`/`CPPTRACE_CATCH` since it is safer with better
-performance guarantees for the most general possible set of users.
+> [!NOTE]
+> It's important to use `cpptrace::rethrow()` from within a `CPPTRACE_CATCH`. If it is not, then no trace for the
+> exception origin will have been collected.
+
+Example:
+
+```cpp
+void bar() {
+    throw std::runtime_error("critical error in bar");
+}
+void foo() {
+    CPPTRACE_TRY {
+        bar();
+    } CPPTRACE_CATCH(const std::exception& e) {
+        std::cerr<<"Exception in foo: "<<e.what()<<std::endl;
+        cpptrace::rethrow();
+    }
+}
+int main() {
+    CPPTRACE_TRY {
+        foo();
+    } CPPTRACE_CATCH(const std::exception& e) {
+        std::cerr<<"Exception encountered while running foo: "<<e.what()<<std::endl;
+        cpptrace::from_current_exception().print(); // prints trace containing main -> foo -> bar
+    }
+}
+```
+
+Sometimes it may be desirable to see both the trace for the exception's origin as well as the trace for where it was
+rethrown. Cpptrace provides an interface for getting the last rethrow location:
+
+```cpp
+namespace cpptrace {
+    const raw_trace& raw_trace_from_current_exception_rethrow();
+    const stacktrace& from_current_exception_rethrow();
+    bool current_exception_was_rethrown();
+}
+```
+
+If the current exception was not rethrown, these functions return references to empty traces.
+`current_exception_was_rethrown` can be used to check if the current exception was rethrown and a non-empty rethrow
+trace exists.
+
+Example usage, utilizing `foo` and `bar` from the above example:
+
+```cpp
+int main() {
+    CPPTRACE_TRY {
+        foo();
+    } CPPTRACE_CATCH(const std::exception& e) {
+        std::cerr<<"Exception encountered while running foo: "<<e.what()<<std::endl;
+        std::cerr<<"Thrown from:"<<std::endl;
+        cpptrace::from_current_exception().print(); // trace containing main -> foo -> bar
+        std::cerr<<"Rethrown from:"<<std::endl;
+        cpptrace::from_current_exception_rethrow().print(); // trace containing main -> foo
+    }
+}
+```
+
+## `cpptrace::try_catch`
+
+As mentioned above, in order to facilitate `try`/`catch` blocks with multiple handlers while still being able to perform
+the magic necessary to collect stack traces on exceptions, cpptrace provides a `cpptrace::try_catch` utility that can
+take multiple handlers:
+
+```cpp
+cpptrace::try_catch(
+    [&] { // try block
+        foo();
+    },
+    [&] (const std::runtime_error& e) {
+        std::cerr<<"Runtime error: "<<e.what()<<std::endl;
+        cpptrace::from_current_exception().print();
+    },
+    [&] (const std::exception& e) {
+        std::cerr<<"Exception: "<<e.what()<<std::endl;
+        cpptrace::from_current_exception().print();
+    },
+    [&] () { // serves the same role as `catch(...)`, an any exception handler
+        std::cerr<<"Unknown exception occurred: "<<std::endl;
+        cpptrace::from_current_exception().print();
+    }
+);
+```
+
+The synopsis for this utility is:
+
+```cpp
+namespace cpptrace {
+    template<typename F, typename... Catches>
+    void try_catch(F&& f, Catches&&... catches);
+}
+```
+
+Similar to a language `try`/`catch`, `catch` handlers will be considered in the order they are listed. Handlers should
+take exactly one argument, equivalent to what would be written for a catch handler, except for `catch(...)` which can be
+achieved by a handler taking no arguments.
+
+## Traces from SEH exceptions
+
+Similar to the above section on collecting [traces from C++ exceptions](#traces-from-all-exceptions-cpptrace_try-and-cpptrace_catch),
+cpptrace provides `CPPTRACE_SEH_TRY` and `CPPTRACE_SEH_EXCEPT` macros that collect traces from SEH exceptions on windows
+with no overhead in the non-throwing (happy) path:
+
+```cpp
+#include <cpptrace/from_current.hpp>
+#include <iostream>
+#include <windows.h>
+
+void foo(int x, int y) {
+    return x / y;
+}
+
+int divide_zero_filter(int code) {
+    if(code == STATUS_INTEGER_DIVIDE_BY_ZERO || code == EXCEPTION_FLT_DIVIDE_BY_ZERO) {
+        return EXCEPTION_EXECUTE_HANDLER;
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+int main() {
+    CPPTRACE_SEH_TRY {
+        foo(10, 0);
+    } CPPTRACE_SEH_EXCEPT(divide_zero_filter(GetExceptionCode())) {
+        std::cerr<<"Division by zero happened!"<<std::endl;
+        cpptrace::from_current_exception().print();
+    }
+}
+```
+
+The `CPPTRACE_SEH_EXCEPT` macro takes a filter expression as input, any expression valid in `__except` is valid.
 
 ## Traced Exception Objects
 
@@ -855,6 +1168,7 @@ namespace cpptrace {
             const raw_trace& get_raw_trace() const;
             stacktrace& get_resolved_trace();
             const stacktrace& get_resolved_trace() const; // throws if not already resolved
+            bool is_resolved() const;
         private:
             void clear();
         };
@@ -875,6 +1189,7 @@ Cpptrace provides a handful of headers to make inclusion more minimal.
 | `cpptrace/formatting.hpp`   | Configurable formatter API                                                                                                                                                                            |
 | `cpptrace/utils.hpp`        | Utility functions, configuration functions, and terminate utilities ([Utilities](#utilities), [Configuration](#configuration), and [Terminate Handling](#terminate-handling))                         |
 | `cpptrace/version.hpp`      | Library version macros                                                                                                                                                                                |
+| `cpptrace/gdb_jit.hpp`      | Provides a special utility related to [JIT support](#jit-support)                                                                                                                                     |
 
 The main cpptrace header is `cpptrace/cpptrace.hpp` which includes everything other than `from_current.hpp` and
 `version.hpp`.
@@ -905,6 +1220,76 @@ Explanation:
   table for compile units emitted by many compilers. Cpptrace uses these by default if they are present since they can
   speed up resolution, however, they can also result in significant memory usage.
 
+## JIT Support
+
+Cpptrace has support for resolving symbols from frames in JIT-compiled code. To do this, cpptrace relies on in-memory
+object files (elf on linux or mach-o on mac) that contain symbol tables and dwarf debug information. The main reason for
+this is many JIT implementations already produce these for debugger support.
+
+These in-memory object files must be set up in such a way that the symbol table and debug symbol addresses match the
+run-time addresses of the JIT code.
+
+The basic interface for informing cpptrace about these in-memory object files is as follows:
+
+```cpp
+namespace cpptrace {
+    void register_jit_object(const char*, std::size_t);
+    void unregister_jit_object(const char*);
+    void clear_all_jit_objects();
+}
+```
+
+Many JIT implementations follow the GDB [JIT Compilation Interface][jitci] so that JIT code can be debugged. The
+interface, at a high level, entails adding in-memory object files to a linked list of object files that GDB and other
+debuggers can reference (stored in the `__jit_debug_descriptor`). Cpptrace provides, as a utility, a mechanism for
+loading all in-memory object files present in the `__jit_debug_descriptor` linked list via `<cpptrace/gdb_jit.hpp>`:
+
+```cpp
+namespace cpptrace {
+    namespace experimental {
+        void register_jit_objects_from_gdb_jit_interface();
+    }
+}
+```
+
+Note: Your program must be able to link against a global C symbol `__jit_debug_descriptor`.
+
+Note: Calling `cpptrace::experimental::register_jit_objects_from_gdb_jit_interface` clears all jit objects previously
+registered with cpptrace.
+
+
+[jitci]: https://sourceware.org/gdb/current/onlinedocs/gdb.html/JIT-Interface.html
+
+## Loading Libraries at Runtime
+
+This section only applies to the dbghelp backend (`CPPTRACE_GET_SYMBOLS_WITH_DBGHELP`) on Windows.
+
+When loading a DLL at runtime with `LoadLibrary` after a stacktrace has already been generated,
+symbols from that library may not be resolved correctly for subsequent stacktraces. To fix this,
+call `cpptrace::load_symbols_for_file` with the same path that was passed to `LoadLibrary`.
+
+```cpp
+HMODULE hModule = LoadLibrary("mydll.dll");
+if (hModule) {
+    cpptrace::load_symbols_for_file("mydll.dll");
+}
+```
+
+For backends other than dbghelp, `load_symbols_for_file` does nothing. For platforms other than
+Windows, it is not declared.
+
+```cpp
+namespace cpptrace {
+    void load_symbols_for_file(const std::string& filename);
+}
+```
+
+# ABI Versioning
+
+Since cpptrace v1.0.0, the library uses an inline ABI versioning namespace and all symbols part of the public interface
+are secretly under the namespace `cpptrace::v1`. This is done to allow for potential future library evolution in an
+ABI-friendly manner.
+
 # Supported Debug Formats
 
 | Format                       | Supported |
@@ -929,7 +1314,7 @@ include(FetchContent)
 FetchContent_Declare(
   cpptrace
   GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
-  GIT_TAG        v0.8.1 # <HASH or TAG>
+  GIT_TAG        v1.0.4 # <HASH or TAG>
 )
 FetchContent_MakeAvailable(cpptrace)
 target_link_libraries(your_target cpptrace::cpptrace)
@@ -945,7 +1330,7 @@ information.
 
 ```sh
 git clone https://github.com/jeremy-rifkin/cpptrace.git
-git checkout v0.8.1
+git checkout v1.0.4
 mkdir cpptrace/build
 cd cpptrace/build
 cmake .. -DCMAKE_BUILD_TYPE=Release
@@ -988,7 +1373,7 @@ you when installing new libraries.
 
 ```ps1
 git clone https://github.com/jeremy-rifkin/cpptrace.git
-git checkout v0.8.1
+git checkout v1.0.4
 mkdir cpptrace/build
 cd cpptrace/build
 cmake .. -DCMAKE_BUILD_TYPE=Release
@@ -1006,7 +1391,7 @@ To install just for the local user (or any custom prefix):
 
 ```sh
 git clone https://github.com/jeremy-rifkin/cpptrace.git
-git checkout v0.8.1
+git checkout v1.0.4
 mkdir cpptrace/build
 cd cpptrace/build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$HOME/wherever
@@ -1079,7 +1464,7 @@ make install
 cd ~/scratch/cpptrace-test
 git clone https://github.com/jeremy-rifkin/libdwarf-lite.git
 cd libdwarf-lite
-git checkout fe09ca800b988e2ff21225ac5e7468ceade2a30e
+git checkout 5dfb2cd2aacf2bf473e5bfea79e41289f88b3a5f # 2.1.0
 mkdir build
 cd build
 cmake .. -DPIC_ALWAYS=On -DBUILD_DWARFDUMP=Off -DCMAKE_PREFIX_PATH=~/scratch/cpptrace-test/resources -DCMAKE_INSTALL_PREFIX=~/scratch/cpptrace-test/resources
@@ -1089,7 +1474,7 @@ make install
 cd ~/scratch/cpptrace-test
 git clone https://github.com/jeremy-rifkin/cpptrace.git
 cd cpptrace
-git checkout v0.8.1
+git checkout v1.0.4
 mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=On -DCPPTRACE_USE_EXTERNAL_LIBDWARF=On -DCMAKE_PREFIX_PATH=~/scratch/cpptrace-test/resources -DCMAKE_INSTALL_PREFIX=~/scratch/cpptrace-test/resources
@@ -1109,7 +1494,7 @@ cpptrace and its dependencies.
 Cpptrace is available through conan at https://conan.io/center/recipes/cpptrace.
 ```
 [requires]
-cpptrace/0.8.1
+cpptrace/1.0.4
 [generators]
 CMakeDeps
 CMakeToolchain
@@ -1132,6 +1517,15 @@ vcpkg install cpptrace
 find_package(cpptrace CONFIG REQUIRED)
 target_link_libraries(main PRIVATE cpptrace::cpptrace)
 ```
+
+## C++20 Modules
+
+Cpptrace supports C++20 modules: `import cpptrace;`. You'll need a modern toolchain in order to use C++20 modules (i.e.
+relatively new compilers, cmake, etc).
+
+For features involving macros you will have to `#include` headers with the macro definitions:
+- `<cpptrace/exceptions_macros.hpp>`: `CPPTRACE_WRAP` and `CPPTRACE_WRAP_BLOCK`
+- `<cpptrace/from_current_macros.hpp>`: `CPPTRACE_TRY`, `CPPTRACE_CATCH`, etc.
 
 # Platform Logistics
 
@@ -1317,6 +1711,51 @@ A couple things I'd like to improve in the future:
 - On Windows when collecting symbols with dbghelp (msvc/clang) parameter types are almost perfect but due to limitations
   in dbghelp the library cannot accurately show const and volatile qualifiers or rvalue references (these appear as
   pointers).
+
+# FAQ
+
+## What about C++23 `<stacktrace>`?
+
+Some day C++23's `<stacktrace>` will be ubiquitous. And maybe one day the msvc implementation will be acceptable.
+The original motivation for cpptrace was to support projects using older C++ standards and as the library has grown its
+functionality has extended beyond the standard library's implementation.
+
+Cpptrace provides functionality beyond what the standard library provides and what implementations provide, such as:
+- Walking inlined function calls
+- Providing a lightweight interface for "raw traces"
+- Resolving function parameter types
+- Providing traced exception objects
+- Providing an API for signal-safe stacktrace generation
+- Providing a way to retrieve stack traces from arbitrary exceptions, not just special cpptrace traced exception
+  objects. This is a feature coming to C++26, but cpptrace provides a solution for C++11.
+
+## What does cpptrace have over other C++ stacktrace libraries?
+
+Other C++ stacktrace libraries, such as boost stacktrace and backward-cpp, fall short when it comes to portability and
+ease of use. In testing, I found neither to provide adequate coverage of various environments. Even when they can be
+made to work in an environment they require manual configuration from the end-user, possibly requiring manual
+installation of third-party dependencies. This is a highly undesirable burden to impose on users, especially when it is
+for a software package which just provides diagnostics as opposed to core functionality. Additionally, cpptrace provides
+support for resolving inlined calls by default for DWARF symbols (boost does not do this, backward-cpp can do this but
+only for some back-ends), better support for resolving full function signatures, and nicer API, among other features.
+
+## I'm getting undefined standard library symbols like `std::__1::basic_string` on MacOS
+
+If you see a linker error along the lines of the following on MacOS then it's highly likely you are mixing standard
+library ABIs.
+
+```
+Undefined symbols for architecture arm64:
+  "std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >::find(char, unsigned long) const", referenced from:
+      cpptrace::detail::demangle(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, bool) in libcpptrace.a(demangle_with_cxxabi.cpp.o)
+      cpptrace::detail::snippet_manager::build_line_table() in libcpptrace.a(snippet.cpp.o)
+```
+
+This can happen when using apple clang to compile cpptrace and gcc to compile your code, or vice versa. The reason is
+that apple clang defaults to libc++ and gcc defaults to libstdc++ and these two standard library implementations are not
+ABI-compatible. To resolve this, ensure you are compiling both cpptrace and your code with the same standard library by
+either using the same compiler for both or using `-stdlib=libc++`/`-stdlib=libstdc++` to control which standard library
+is used.
 
 # Contributing
 

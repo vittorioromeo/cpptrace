@@ -7,7 +7,7 @@
 #include "utils/microfmt.hpp"
 #include "utils/utils.hpp"
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
 namespace libdwarf {
     class srcfiles {
@@ -20,7 +20,7 @@ namespace libdwarf {
             : dbg(dbg), dw_srcfiles(dw_srcfiles), dw_filecount(static_cast<Dwarf_Unsigned>(filecount))
         {
             if(filecount < 0) {
-                throw internal_error(microfmt::format("Unexpected dw_filecount {}", filecount));
+                throw internal_error("Unexpected dw_filecount {}", filecount);
             }
         }
         ~srcfiles() {
@@ -51,11 +51,11 @@ namespace libdwarf {
         // note: dwarf uses 1-indexing
         const char* get(Dwarf_Unsigned file_i) const {
             if(file_i >= dw_filecount) {
-                throw internal_error(microfmt::format(
+                throw internal_error(
                     "Error while accessing the srcfiles list, requested index {} is out of bounds (count = {})",
                     file_i,
                     dw_filecount
-                ));
+                );
             }
             return dw_srcfiles[file_i];
         }
@@ -64,52 +64,29 @@ namespace libdwarf {
         }
     };
 
-    // sorted range entries for dies
-    template<
-        typename T,
-        typename std::enable_if<std::is_trivially_copyable<T>::value && sizeof(T) <= 16, int>::type = 0
-    >
-    class die_cache {
+    // container of items which are keyed by ranges
+    template<typename K, typename V>
+    class range_map {
     public:
-        struct die_handle {
-            std::uint32_t die_index;
+        struct handle {
+            std::uint32_t index;
         };
     private:
-        struct PACKED basic_range_entry {
-            die_handle die;
-            Dwarf_Addr low;
-            Dwarf_Addr high;
+        struct PACKED range_entry {
+            handle item;
+            K low;
+            K high;
         };
-        struct PACKED annotated_range_entry {
-            die_handle die;
-            Dwarf_Addr low;
-            Dwarf_Addr high;
-            T data;
-        };
-        using range_entry = typename std::conditional<
-            std::is_same<T, monostate>::value,
-            basic_range_entry,
-            annotated_range_entry
-        >::type;
-        std::vector<die_object> dies;
+        std::vector<V> items;
         std::vector<range_entry> range_entries;
     public:
-        die_handle add_die(die_object&& die) {
-            dies.push_back(std::move(die));
-            VERIFY(dies.size() < maxValue<std::uint32_t>);
-            return die_handle{static_cast<std::uint32_t>(dies.size() - 1)};
+        handle add_item(V&& item) {
+            items.push_back(std::move(item));
+            VERIFY(items.size() < maxValue<std::uint32_t>);
+            return handle{static_cast<std::uint32_t>(items.size() - 1)};
         }
-        template<typename Void = void>
-        auto insert(die_handle die, Dwarf_Addr low, Dwarf_Addr high)
-            -> typename std::enable_if<std::is_same<T, monostate>::value, Void>::type
-        {
-            range_entries.push_back({die, low, high});
-        }
-        template<typename Void = void>
-        auto insert(die_handle die, Dwarf_Addr low, Dwarf_Addr high, const T& t)
-            -> typename std::enable_if<!std::is_same<T, monostate>::value, Void>::type
-        {
-            range_entries.push_back({die, low, high, t});
+        void insert(handle handle, K low, K high) {
+            range_entries.push_back({handle, low, high});
         }
         void finalize() {
             std::sort(range_entries.begin(), range_entries.end(), [] (const range_entry& a, const range_entry& b) {
@@ -120,41 +97,19 @@ namespace libdwarf {
             return range_entries.size();
         }
 
-        struct die_and_data {
-            const die_object& die;
-            T data;
-        };
-        template<typename Ret = const die_object&>
-        auto make_lookup_result(typename std::vector<range_entry>::const_iterator vec_it) const
-            -> typename std::enable_if<std::is_same<T, monostate>::value, Ret>::type
-        {
-            return dies.at(vec_it->die.die_index);
-        }
-        template<typename Ret = die_and_data>
-        auto make_lookup_result(typename std::vector<range_entry>::const_iterator vec_it) const
-            -> typename std::enable_if<!std::is_same<T, monostate>::value, Ret>::type
-        {
-            return die_and_data{dies.at(vec_it->die.die_index), vec_it->data};
-        }
-        using lookup_result = typename std::conditional<
-            std::is_same<T, monostate>::value,
-            const die_object&,
-            die_and_data
-        >::type;
-        optional<lookup_result> lookup(Dwarf_Addr pc) const {
+        optional<const V&> lookup(K key) const {
             auto vec_it = first_less_than_or_equal(
                 range_entries.begin(),
                 range_entries.end(),
-                pc,
-                [] (Dwarf_Addr pc, const range_entry& entry) {
-                    return pc < entry.low;
+                key,
+                [] (K key, const range_entry& entry) {
+                    return key < entry.low;
                 }
             );
             if(vec_it == range_entries.end()) {
                 return nullopt;
             }
-            // This would be an if constexpr if only C++17...
-            return make_lookup_result(vec_it);
+            return items.at(vec_it->item.index);
         }
     };
 
@@ -203,6 +158,6 @@ namespace libdwarf {
     };
 }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

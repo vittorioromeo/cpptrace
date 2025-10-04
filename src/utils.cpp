@@ -10,38 +10,48 @@
 #include "platform/exception_type.hpp"
 #include "options.hpp"
 
-namespace cpptrace {
+#if !IS_WINDOWS
+ #include <unistd.h>
+#endif
+
+CPPTRACE_BEGIN_NAMESPACE
     std::string demangle(const std::string& name) {
         return detail::demangle(name, false);
     }
 
     std::string get_snippet(const std::string& path, std::size_t line, std::size_t context_size, bool color) {
-        return detail::get_snippet(path, line, context_size, color);
+        return detail::get_snippet(path, line, nullable<std::uint32_t>::null(), context_size, color);
+    }
+
+    std::string get_snippet(
+        const std::string& path,
+        std::size_t line,
+        nullable<std::uint32_t> column,
+        std::size_t context_size,
+        bool color
+    ) {
+        return detail::get_snippet(path, line, column, context_size, color);
     }
 
     bool isatty(int fd) {
         return detail::isatty(fd);
     }
 
-    extern const int stdin_fileno = detail::fileno(stdin);
-    extern const int stdout_fileno = detail::fileno(stdout);
-    extern const int stderr_fileno = detail::fileno(stderr);
-
-    namespace detail {
-        const formatter& get_terminate_formatter() {
-            static formatter the_formatter = formatter{}
-                .header("Stack trace to reach terminate handler (most recent call first):");
-            return the_formatter;
-        }
-    }
+    #if IS_WINDOWS
+     extern const int stdin_fileno = detail::fileno(stdin);
+     extern const int stdout_fileno = detail::fileno(stdout);
+     extern const int stderr_fileno = detail::fileno(stderr);
+    #else
+     extern const int stdin_fileno = STDIN_FILENO;
+     extern const int stdout_fileno = STDOUT_FILENO;
+     extern const int stderr_fileno = STDERR_FILENO;
+    #endif
 
     CPPTRACE_FORCE_NO_INLINE void print_terminate_trace() {
         try { // try/catch can never be hit but it's needed to prevent TCO
-            detail::get_terminate_formatter().print(std::cerr, generate_trace(1));
+            get_default_formatter().print(std::cerr, generate_trace(1));
         } catch(...) {
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
         }
     }
 
@@ -81,4 +91,10 @@ namespace cpptrace {
     void register_terminate_handler() {
         std::set_terminate(terminate_handler);
     }
-}
+
+    #if defined(_WIN32) && !defined(CPPTRACE_GET_SYMBOLS_WITH_DBGHELP)
+     void load_symbols_for_file(const std::string&) {
+         // nop
+     }
+    #endif
+CPPTRACE_END_NAMESPACE

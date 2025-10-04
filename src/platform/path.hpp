@@ -2,6 +2,7 @@
 #define PATH_HPP
 
 #include "platform/platform.hpp"
+#include "utils/string_view.hpp"
 
 #include <string>
 #include <cctype>
@@ -13,11 +14,11 @@
 #include <windows.h>
 #endif
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     #if IS_WINDOWS
     constexpr char PATH_SEP = '\\';
-    inline bool is_absolute(const std::string& path) {
+    inline bool is_absolute(string_view path) {
         // I don't want to bring in shlwapi as a dependency just for PathIsRelativeA so I'm following the guidance of
         // https://stackoverflow.com/a/71941552/15675011 and
         // https://github.com/wine-mirror/wine/blob/b210a204137dec8d2126ca909d762454fd47e963/dlls/kernelbase/path.c#L982
@@ -34,7 +35,7 @@ namespace detail {
     }
     #else
     constexpr char PATH_SEP = '/';
-    inline bool is_absolute(const std::string& path) {
+    inline bool is_absolute(string_view path) {
         if(path.empty()) {
             return false;
         }
@@ -42,6 +43,6 @@ namespace detail {
     }
     #endif
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

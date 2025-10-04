@@ -3,6 +3,7 @@
 #include "symbols/symbols.hpp"
 
 #include <cpptrace/basic.hpp>
+
 #include "dwarf/resolver.hpp"
 #include "utils/common.hpp"
 #include "utils/utils.hpp"
@@ -15,8 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
-
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
 namespace libdwarf {
     cpptrace::detail::UniquePtr<symbol_resolver> get_resolver_for_object(const std::string& object_path) {
@@ -83,9 +83,37 @@ namespace libdwarf {
         return final_trace;
     }
 
+    #if IS_LINUX || IS_APPLE
+    CPPTRACE_FORCE_NO_INLINE_FOR_PROFILING
+    void try_resolve_jit_frame(const cpptrace::object_frame& dlframe, frame_with_inlines& frame) {
+        auto object_res = lookup_jit_object(dlframe.raw_address);
+        // TODO: At some point, dwarf resolution
+        if(object_res) {
+            frame.frame.symbol = object_res.unwrap().object
+                .lookup_symbol(dlframe.raw_address - object_res.unwrap().base).value_or("");
+        }
+    }
+    #endif
+
+    CPPTRACE_FORCE_NO_INLINE_FOR_PROFILING
+    void try_resolve_frame(
+        symbol_resolver* resolver,
+        const cpptrace::object_frame& dlframe,
+        frame_with_inlines& frame
+    ) {
+        try {
+            frame = resolver->resolve_frame(dlframe);
+        } catch(...) {
+            detail::log_and_maybe_propagate_exception(std::current_exception());
+            frame.frame.raw_address = dlframe.raw_address;
+            frame.frame.object_address = dlframe.object_address;
+            frame.frame.filename = dlframe.object_path;
+        }
+    }
+
     CPPTRACE_FORCE_NO_INLINE_FOR_PROFILING
     std::vector<stacktrace_frame> resolve_frames(const std::vector<object_frame>& frames) {
-        std::vector<frame_with_inlines> trace(frames.size(), {null_frame, {}});
+        std::vector<frame_with_inlines> trace(frames.size(), {null_frame(), {}});
         // Locking around all libdwarf interaction per https://github.com/davea42/libdwarf-code/discussions/184
         // And also locking for interactions with get_resolver
         static std::mutex mutex;
@@ -93,6 +121,14 @@ namespace libdwarf {
         for(const auto& group : collate_frames(frames, trace)) {
             try {
                 const auto& object_name = group.first;
+                if(object_name.empty()) {
+                    #if IS_LINUX || IS_APPLE
+                    for(const auto& entry : group.second) {
+                        try_resolve_jit_frame(entry.first.get(), entry.second.get());
+                    }
+                    #endif
+                    continue;
+                }
                 // TODO PERF: Potentially a duplicate open and parse with module base stuff (and debug map resolver)
                 #if IS_LINUX
                 auto object = open_elf_cached(object_name);
@@ -103,17 +139,9 @@ namespace libdwarf {
                 for(const auto& entry : group.second) {
                     const auto& dlframe = entry.first.get();
                     auto& frame = entry.second.get();
-                    try {
-                        frame = resolver->resolve_frame(dlframe);
-                    } catch(...) {
-                        frame.frame.raw_address = dlframe.raw_address;
-                        frame.frame.object_address = dlframe.object_address;
-                        frame.frame.filename = dlframe.object_path;
-                        if(!should_absorb_trace_exceptions()) {
-                            throw;
-                        }
-                    }
+                    try_resolve_frame(resolver.get(), dlframe, frame);
                     #if IS_LINUX || IS_APPLE
+                    // fallback to symbol tables
                     if(frame.frame.symbol.empty() && object.has_value()) {
                         frame.frame.symbol = object
                             .unwrap_value()
@@ -122,16 +150,14 @@ namespace libdwarf {
                     #endif
                 }
             } catch(...) { // NOSONAR
-                if(!should_absorb_trace_exceptions()) {
-                    throw;
-                }
+                detail::log_and_maybe_propagate_exception(std::current_exception());
             }
         }
         // fill in basic info for any frames where there were resolution issues
         for(std::size_t i = 0; i < frames.size(); i++) {
             const auto& dlframe = frames[i];
             auto& frame = trace[i];
-            if(frame.frame == null_frame) {
+            if(frame.frame == null_frame()) {
                 frame = {
                     {
                         dlframe.raw_address,
@@ -151,6 +177,6 @@ namespace libdwarf {
     }
 }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

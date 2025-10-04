@@ -5,11 +5,14 @@
 #include <gmock/gmock.h>
 #include <gmock/gmock-matchers.h>
 
-#include <cpptrace/cpptrace.hpp>
-
 #include "common.hpp"
 
-using namespace std::literals;
+#ifdef TEST_MODULE
+import cpptrace;
+#else
+#include <cpptrace/cpptrace.hpp>
+#endif
+
 
 #ifdef _MSC_VER
  #define CPPTRACE_FORCE_INLINE [[msvc::flatten]]
@@ -22,7 +25,7 @@ using namespace std::literals;
 TEST(Stacktrace, Empty) {
     cpptrace::stacktrace empty;
     EXPECT_TRUE(empty.empty());
-    EXPECT_EQ(empty.to_string(), "Stack trace (most recent call first):\n<empty trace>\n");
+    EXPECT_EQ(empty.to_string(), "Stack trace (most recent call first):\n<empty trace>");
 }
 
 

@@ -1,6 +1,13 @@
 # Changelog
 
 - [Changelog](#changelog)
+- [v1.0.4](#v104)
+- [v1.0.3](#v103)
+- [v1.0.2](#v102)
+- [v1.0.1](#v101)
+- [v1.0.0](#v100)
+- [v0.8.3](#v083)
+- [v0.8.2](#v082)
 - [v0.8.1](#v081)
 - [v0.8.0](#v080)
 - [v0.7.5](#v075)
@@ -26,6 +33,212 @@
 - [v0.2.0](#v020)
 - [v0.1.1](#v011)
 - [v0.1](#v01)
+
+# v1.0.4
+
+Added
+- Added filtering for C++ exception handling internals during printing. This cleans up output from current exceptions
+  and std::terminate traces.
+
+Fixed:
+- Fixed reported version number for cpptrace
+
+Other:
+- Bumped default libdwarf to 2.1.0
+- Updated stacktrace output for the cpptrace terminate handler
+- Updated demo program
+
+# v1.0.3
+
+Added:
+- Added line indicator to make source code snippets in case colors aren't being used
+- Added column indicator to source code snippets
+- Added 32-bit ARM support for StackWalk64 https://github.com/jeremy-rifkin/cpptrace/pull/271 (@Xottab-DUTY)
+
+# v1.0.2
+
+Added:
+- Added `break_before_filename` formatting option https://github.com/jeremy-rifkin/cpptrace/issues/259 (@codeinred)
+
+Fixes:
+- Fixed 32-bit clang-cl build
+- Fixed build on gcc 4.8.5
+- Fixed StackWalk64 for 64-bit arm https://github.com/jeremy-rifkin/cpptrace/pull/270 (@mcourteaux)
+- Fixed compatibility issue with cmake versions before 3.23
+
+Other:
+- Added a couple notes to the README
+
+# v1.0.1
+
+Added:
+- Added from-current-exception utility for SEH on windows (`CPPTRACE_SEH_TRY`/`CPPTRACE_SEH_EXCEPT`)
+
+Fixes:
+- Fixed a static assert without a message causing issues on some C++11 builds
+- Fixed build 32-bit build on linux
+- Fixed from-current-exception system for 32-bit windows where SEH behaves much differently
+- Fixed clang-cl build
+
+# v1.0.0
+
+Major changes:
+- Overhauled how the from-current-exception system and `CPPTRACE_TRY`/`CPPTRACE_CATCH` macros work. They now check the
+  thrown exception type against the type the catch accepts to decide whether or not to collect a trace. This eliminates
+  the need for The `TRYZ`/`CATCHZ` variants of the macros as now the normal macro is equally zero-overhead. As such, the
+  `Z` variants have been removed.
+
+Breaking changes:
+- `CPPTRACE_TRYZ` and `CPPTRACE_CATCHZ` have been removed, change uses to `CPPTRACE_TRY`/`CPPTRACE_CATCH`
+- `CPPTRACE_TRY`/`CPPTRACE_CATCH` macros no longer support multiple handlers and `CPPTRACE_CATCH_ALT` has been removed.
+  Instead, use `cpptrace::try_catch`.
+  > **Details**
+  >
+  > Author's note: I apologize for this non-trivial breaking change, however, it allows for a much improved
+  > implementation of the from-current-exception system. The impact should be [very minimal](https://github.com/search?type=code&q=%2F%5CbCPPTRACE_CATCH_ALT%5Cb%2F+language%3Ac%2B%2B+-is%3Afork+-repo%3Ajeremy-rifkin%2Fcpptrace+-path%3Afrom_current.hpp)
+  > for most codebases.
+  >
+  > Transitioning to `cpptrace::try_catch` is straightforward:
+  > <table>
+  > <thead>
+  > <tr>
+  > <td>
+  > Before
+  > </td>
+  > <td>
+  > Now
+  > </td>
+  > </tr>
+  > </thead>
+  > <tbody>
+  > <tr>
+  > <td>
+
+  > ```cpp
+  > CPPTRACE_TRY {
+  >     foo();
+  > } CPPTRACE_CATCH(const std::logic_error& e) {
+  >     handle_logic_error(e);
+  > } CPPTRACE_CATCH_ALT(const std::exception& e) {
+  >     handle_exception(e);
+  > } CPPTRACE_CATCH_ALT(...) {
+  >     handle_unknown_exception();
+  > }
+  > ```
+
+  > </td>
+  > <td>
+
+  > ```cpp
+  > cpptrace::try_catch(
+  >     [&] { // try block
+  >         foo();
+  >     },
+  >     [&] (const std::runtime_error& e) {
+  >         handle_logic_error(e);
+  >     },
+  >     [&] (const std::exception& e) {
+  >         handle_exception(e);
+  >     },
+  >     [&] () { // `catch(...)`
+  >         handle_unknown_exception();
+  >     }
+  > );
+  > ```
+
+  > </td>
+  > </tr>
+  > </tbody>
+  > </table>
+  >
+  > Please note as well that code such as the following, which was valid before, will still compile now but may report a
+  > misleading trace. The second catch handler will work but it cpptrace won't know about the handler's type and won't
+  > collect a trace that doesn't match the first handler's type, `std::logic_error`.
+  >
+  > ```cpp
+  > CPPTRACE_TRY {
+  >     foo();
+  > } CPPTRACE_CATCH(const std::logic_error& e) {
+  >     ...
+  > } catch(const std::exception& e) {
+  >     ...
+  > }
+  > ```
+
+Potentially-breaking changes:
+- This version of cpptrace reworks the public interface to use an inline ABI versioning namespace. All symbols in the
+  public interface are now secretly in the `cpptrace::v1` namespace. This is an ABI break, but any ABI mismatch will
+  result in linker errors instead of silent bugs. This change is an effort to allow future evolution of cpptrace in a
+  way that respects ABI.
+- This version fixes a problem with returns from `CPPTRACE_TRY` blocks on windows. Unfortunately, this macro has to use
+  an IILE on windows and as such `return` statements won't properly return from the enclosing function. This was a
+  footgun and now `return` statements in `CPPTRACE_TRY` blocks are prevented from compiling on windows.
+
+Added
+- Added `cpptrace::try_catch` for handling multiple alternatives with access to current exception traces
+- Added `cpptrace::rethrow` utility for rethrowing exceptions from `CPPTRACE_CATCH` while preserving the stacktrace https://github.com/jeremy-rifkin/cpptrace/issues/214
+- Added utilities for getting the current trace from the last rethrow point
+  (`cpptrace::raw_trace_from_current_exception_rethrow`, `cpptrace::from_current_exception_rethrow`,
+  `cpptrace::current_exception_was_rethrown`)
+- Added a logger system to allow cpptrace to report errors in a configurable manner. By default, cpptrace doesn't log
+  anything. The following functions can be used to change this: (`cpptrace::set_log_level`,
+  `cpptrace::set_log_callback`, and `cpptrace::use_default_stderr_logger`)
+- Added `cpptrace::basename` utility
+- Added `cpptrace::prettify_type` utility
+- Added `cpptrace::prune_symbol` utility
+- Added formatter option for symbol formatting (`cpptrace::formatter::symbols`)
+- Added `cpptrace::detail::lazy_trace_holder::is_resolved`
+- Added support for C++20 modules https://github.com/jeremy-rifkin/cpptrace/pull/248
+- Added `cpptrace::load_symbols_for_file` to support DLLs loaded at runtime when using dbghelp https://github.com/jeremy-rifkin/cpptrace/pull/247
+
+Removed
+- Removed `CPPTRACE_TRYZ` and `CPPTRACE_CATCHZ` macros
+- Removed the `CPPTRACE_CATCH_ALT` macro
+
+Fixed
+- Fixed a problem where `CPPTRACE_TRY` blocks could contain `return` statements but not return on windows due to an IILE. This is now an error. https://github.com/jeremy-rifkin/cpptrace/issues/245
+- Fixed cases where cpptrace could print to stderr on internal errors without the user desiring so https://github.com/jeremy-rifkin/cpptrace/issues/234
+- Fixed a couple internal locking mistakes
+- Fixed a couple of code paths that could be susceptible to static init order issues
+- Fixed bug with loading elf symbol tables that contain zero-sized entries
+- Fixed an incorrect assertion regarding looking up symbols at program counters that reside before any seen subprogram DIE https://github.com/jeremy-rifkin/cpptrace/issues/250
+- Fixed issue with `cpptrace::stacktrace::to_string()` ending with a newline on empty traces
+
+Other
+- Marked some paths in `CPPTRACE_CATCH` and `CPPTRACE_CATCHZ` as unreachable to improve usability in cases where the
+  compiler may warn about missing returns.
+- Improved resilience to libdwarf errors https://github.com/jeremy-rifkin/cpptrace/pull/251
+- Removed internal use of `std::is_trivial` which is deprecated in C++26 https://github.com/jeremy-rifkin/cpptrace/issues/236
+- Bumped libdwarf to 2.0.0
+- Added `--address` flag for internal symbol table tool
+- Various internal work to improve the codebase and reduce complexity
+
+# v0.8.3
+
+Added:
+- Added basic JIT support https://github.com/jeremy-rifkin/cpptrace/issues/226
+- Added `cpptrace::formatter::transform` https://github.com/jeremy-rifkin/cpptrace/issues/227
+- Added support for gcc 4.8.5 https://github.com/jeremy-rifkin/cpptrace/issues/220
+
+Fixed:
+- Fixed bug related to calling `dwarf_dealloc` on strings from `dwarf_formstring` and `dwarf_diename` https://github.com/davea42/libdwarf-code/issues/279
+- Fixed incorrect cmake version variable https://github.com/jeremy-rifkin/cpptrace/issues/231
+- Fixed `address_mode::none` not working https://github.com/jeremy-rifkin/cpptrace/issues/221
+- Fixed use of `-Wall` for clang-cl
+
+Other:
+- Added ARM CI
+- Miscellaneous work on supporting old compilers
+- Updated cpptrace cmake target configuration to not add public compile definitions
+- Internal refactoring, cleanup, and code improvements
+
+# v0.8.2
+
+Fixed:
+- Fixed printing of internal error messages when an object file can't be loaded, mainly affecting MacOS https://github.com/jeremy-rifkin/cpptrace/issues/217
+
+Other:
+- Bumped zstd via FetchContent to 1.5.7
 
 # v0.8.1
 

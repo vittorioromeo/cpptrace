@@ -24,7 +24,7 @@
 #include "binary/object.hpp"
 #include "options.hpp"
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
 namespace addr2line {
     #if IS_LINUX || IS_APPLE
@@ -79,8 +79,9 @@ namespace addr2line {
     std::string resolve_addresses(const std::string& addresses, const std::string& executable) {
         pipe_t output_pipe;
         pipe_t input_pipe;
-        VERIFY(pipe(output_pipe.data) == 0);
-        VERIFY(pipe(input_pipe.data) == 0);
+        if(pipe(output_pipe.data) != 0 || pipe(input_pipe.data) != 0) {
+            throw internal_error("call to pipe failed: {}", errno);
+        }
         const pid_t pid = fork();
         if(pid == -1) { return ""; } // error? TODO: Diagnostic
         if(pid == 0) { // child
@@ -124,7 +125,9 @@ namespace addr2line {
             #endif
             _exit(1); // TODO: Diagnostic?
         }
-        VERIFY(write(input_pipe.end.write, addresses.data(), addresses.size()) != -1);
+        if(write(input_pipe.end.write, addresses.data(), addresses.size()) == -1) {
+            throw internal_error("call to write failed: {}", errno);
+        }
         close(input_pipe.end.read);
         close(input_pipe.end.write);
         close(output_pipe.end.write);
@@ -271,7 +274,7 @@ namespace addr2line {
 
     std::vector<stacktrace_frame> resolve_frames(const std::vector<object_frame>& frames) {
         // TODO: Refactor better
-        std::vector<stacktrace_frame> trace(frames.size(), null_frame);
+        std::vector<stacktrace_frame> trace(frames.size(), null_frame());
         for(std::size_t i = 0; i < frames.size(); i++) {
             trace[i].raw_address = frames[i].raw_address;
             trace[i].object_address = frames[i].object_address;
@@ -283,6 +286,9 @@ namespace addr2line {
             for(const auto& entry : entries) {
                 try {
                     const auto& object_name = entry.first;
+                    if(object_name.empty()) {
+                        continue;
+                    }
                     const auto& entries_vec = entry.second;
                     // You may ask why it'd ever happen that there could be an empty entries_vec array, if there're
                     // no addresses why would get_addr2line_targets do anything? The reason is because if things in
@@ -309,9 +315,7 @@ namespace addr2line {
                         update_trace(output[i], i, entries_vec);
                     }
                 } catch(...) { // NOSONAR
-                    if(!should_absorb_trace_exceptions()) {
-                        throw;
-                    }
+                    detail::log_and_maybe_propagate_exception(std::current_exception());
                 }
             }
         }
@@ -319,6 +323,6 @@ namespace addr2line {
     }
 }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

@@ -18,7 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
 namespace libdwarf {
     #if IS_APPLE
@@ -203,6 +203,6 @@ namespace libdwarf {
     #endif
 }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

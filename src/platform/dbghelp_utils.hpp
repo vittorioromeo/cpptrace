@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <mutex>
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     class dbghelp_syminit_info {
         // `void*` is used to avoid including the (expensive) windows.h header here
@@ -43,7 +43,7 @@ namespace detail {
 
     NODISCARD std::unique_lock<std::recursive_mutex> get_dbghelp_lock();
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif
 

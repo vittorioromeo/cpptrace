@@ -6,18 +6,19 @@
 #include <gmock/gmock.h>
 #include <gmock/gmock-matchers.h>
 
-#include <cpptrace/cpptrace.hpp>
-
 #include "common.hpp"
 
-using namespace std::literals;
-
+#ifdef TEST_MODULE
+import cpptrace;
+#else
+#include <cpptrace/cpptrace.hpp>
+#endif
 
 
 TEST(ObjectTrace, Empty) {
     cpptrace::object_trace empty;
     EXPECT_TRUE(empty.empty());
-    EXPECT_EQ(empty.resolve().to_string(), "Stack trace (most recent call first):\n<empty trace>\n");
+    EXPECT_EQ(empty.resolve().to_string(), "Stack trace (most recent call first):\n<empty trace>");
 }
 
 

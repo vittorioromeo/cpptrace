@@ -5,6 +5,7 @@
 #include "symbols/symbols.hpp"
 #include "platform/platform.hpp"
 #include "utils/UniquePtr.hpp"
+#include "utils/string_view.hpp"
 
 #if false
  #define CPPTRACE_FORCE_NO_INLINE_FOR_PROFILING CPPTRACE_FORCE_NO_INLINE
@@ -12,7 +13,7 @@
  #define CPPTRACE_FORCE_NO_INLINE_FOR_PROFILING
 #endif
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
 namespace libdwarf {
     class symbol_resolver {
@@ -24,8 +25,8 @@ namespace libdwarf {
 
     class null_resolver : public symbol_resolver {
     public:
-        null_resolver() = default;
-        null_resolver(const std::string&) {}
+        explicit null_resolver() = default;
+        null_resolver(cstring_view) {}
 
         CPPTRACE_FORCE_NO_INLINE_FOR_PROFILING
         frame_with_inlines resolve_frame(const object_frame& frame_info) override {
@@ -44,12 +45,12 @@ namespace libdwarf {
         };
     };
 
-    cpptrace::detail::UniquePtr<symbol_resolver> make_dwarf_resolver(const std::string& object_path);
+    cpptrace::detail::UniquePtr<symbol_resolver> make_dwarf_resolver(cstring_view object_path);
     #if IS_APPLE
      cpptrace::detail::UniquePtr<symbol_resolver> make_debug_map_resolver(const std::string& object_path);
     #endif
 }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

@@ -119,10 +119,12 @@ def build(runner: MatrixRunner):
         args = [
             "cmake",
             "..",
+            "-GNinja",
             f"-DCMAKE_BUILD_TYPE={matrix['target']}",
             f"-DCMAKE_CXX_COMPILER={matrix['compiler']}",
             f"-DCMAKE_C_COMPILER={get_c_compiler_counterpart(matrix['compiler'])}",
             f"-DCMAKE_CXX_STANDARD={matrix['std']}",
+            "-DCPPTRACE_DISABLE_CXX_20_MODULES=ON",
             f"-DCPPTRACE_USE_EXTERNAL_LIBDWARF=On",
             f"-DCPPTRACE_USE_EXTERNAL_ZSTD=On",
             f"-DCPPTRACE_WERROR_BUILD=On",
@@ -138,7 +140,7 @@ def build(runner: MatrixRunner):
            args.append("-DCPPTRACE_BUILD_TEST_RDYNAMIC=On")
         succeeded = runner.run_command(*args)
         if succeeded:
-            return runner.run_command("make", "-j")
+            return runner.run_command("ninja")
     else:
         args = [
             "cmake",
@@ -147,6 +149,7 @@ def build(runner: MatrixRunner):
             f"-DCMAKE_CXX_COMPILER={matrix['compiler']}",
             f"-DCMAKE_C_COMPILER={get_c_compiler_counterpart(matrix['compiler'])}",
             f"-DCMAKE_CXX_STANDARD={matrix['std']}",
+            "-DCPPTRACE_DISABLE_CXX_20_MODULES=ON",
             f"-DCPPTRACE_USE_EXTERNAL_LIBDWARF=On",
             f"-DCPPTRACE_USE_EXTERNAL_ZSTD=On",
             f"-DCPPTRACE_WERROR_BUILD=On",
@@ -158,11 +161,11 @@ def build(runner: MatrixRunner):
             f"-DBUILD_SHARED_LIBS={matrix['shared']}"
         ]
         if matrix["compiler"] == "g++":
-            args.append("-GUnix Makefiles")
+            args.append("-GNinja")
         succeeded = runner.run_command(*args)
         if succeeded:
             if matrix["compiler"] == "g++":
-                return runner.run_command("make", "-j")
+                return runner.run_command("ninja")
             else:
                 return runner.run_command("msbuild", "cpptrace.sln")
     return False
@@ -173,10 +176,12 @@ def build_full_or_auto(runner: MatrixRunner):
         args = [
             "cmake",
             "..",
+            "-GNinja",
             f"-DCMAKE_BUILD_TYPE={matrix['target']}",
             f"-DCMAKE_CXX_COMPILER={matrix['compiler']}",
             f"-DCMAKE_C_COMPILER={get_c_compiler_counterpart(matrix['compiler'])}",
             f"-DCMAKE_CXX_STANDARD={matrix['std']}",
+            "-DCPPTRACE_DISABLE_CXX_20_MODULES=ON",
             f"-DCPPTRACE_USE_EXTERNAL_LIBDWARF=On",
             f"-DCPPTRACE_USE_EXTERNAL_ZSTD=On",
             f"-DCPPTRACE_WERROR_BUILD=On",
@@ -189,7 +194,7 @@ def build_full_or_auto(runner: MatrixRunner):
             args.append(f"{matrix['config']}")
         succeeded = runner.run_command(*args)
         if succeeded:
-            return runner.run_command("make", "-j")
+            return runner.run_command("ninja")
     else:
         args = [
             "cmake",
@@ -198,6 +203,7 @@ def build_full_or_auto(runner: MatrixRunner):
             f"-DCMAKE_CXX_COMPILER={matrix['compiler']}",
             f"-DCMAKE_C_COMPILER={get_c_compiler_counterpart(matrix['compiler'])}",
             f"-DCMAKE_CXX_STANDARD={matrix['std']}",
+            "-DCPPTRACE_DISABLE_CXX_20_MODULES=ON",
             f"-DCPPTRACE_USE_EXTERNAL_LIBDWARF=On",
             f"-DCPPTRACE_USE_EXTERNAL_ZSTD=On",
             f"-DCPPTRACE_WERROR_BUILD=On",
@@ -208,11 +214,11 @@ def build_full_or_auto(runner: MatrixRunner):
         if matrix["config"] != "":
             args.append(f"{matrix['config']}")
         if matrix["compiler"] == "g++":
-            args.append("-GUnix Makefiles")
+            args.append("-GNinja")
         succeeded = runner.run_command(*args)
         if succeeded:
             if matrix["compiler"] == "g++":
-                return runner.run_command("make", "-j")
+                return runner.run_command("ninja")
             else:
                 return runner.run_command("msbuild", "cpptrace.sln")
     return False

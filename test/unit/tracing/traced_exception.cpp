@@ -1,4 +1,3 @@
-#include <string_view>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -6,11 +5,13 @@
 #include <gmock/gmock.h>
 #include <gmock/gmock-matchers.h>
 
-#include <cpptrace/cpptrace.hpp>
-
 #include "common.hpp"
 
-using namespace std::literals;
+#ifdef TEST_MODULE
+import cpptrace;
+#else
+#include <cpptrace/cpptrace.hpp>
+#endif
 
 
 static volatile int truthyTracedException = 2;
@@ -44,7 +45,7 @@ TEST(TracedException, Basic) {
         line_numbers.insert(line_numbers.begin(), __LINE__ + 1);
         stacktrace_traced_object_1(line_numbers);
     } catch(cpptrace::exception& e) {
-        EXPECT_EQ(e.message(), "foobar"sv);
+        EXPECT_EQ(e.message(), std::string("foobar"));
         const auto& trace = e.trace();
         ASSERT_GE(trace.frames.size(), 4);
         size_t i = 0;

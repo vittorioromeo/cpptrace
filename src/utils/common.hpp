@@ -24,6 +24,13 @@
  #define NODISCARD
 #endif
 
+// workaround a bizarre gcc bug https://godbolt.org/z/s78vnf7jv
+// https://github.com/jeremy-rifkin/cpptrace/issues/220
+#if defined(__GNUC__) && (__GNUC__ < 7)
+ #undef NODISCARD
+ #define NODISCARD
+#endif
+
 #if IS_MSVC
  #define MSVC_CDECL __cdecl
 #else
@@ -37,18 +44,20 @@
  #define PACKED
 #endif
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
-    static const stacktrace_frame null_frame {
-        0,
-        0,
-        nullable<std::uint32_t>::null(),
-        nullable<std::uint32_t>::null(),
-        "",
-        "",
-        false
-    };
+    inline stacktrace_frame null_frame() {
+        return {
+            0,
+            0,
+            nullable<std::uint32_t>::null(),
+            nullable<std::uint32_t>::null(),
+            "",
+            "",
+            false
+        };
+    }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

@@ -5,12 +5,15 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
+#include <fstream>
 
 #include "cpptrace/basic.hpp"
+#include "jit/jit_objects.hpp"
 #include "symbols/symbols.hpp"
 #include "unwind/unwind.hpp"
 #include "demangle/demangle.hpp"
@@ -22,15 +25,13 @@
 #include "snippets/snippet.hpp"
 #include "options.hpp"
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
     CPPTRACE_FORCE_NO_INLINE
     raw_trace raw_trace::current(std::size_t skip) {
         try { // try/catch can never be hit but it's needed to prevent TCO
             return generate_raw_trace(skip + 1);
         } catch(...) {
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return raw_trace{};
         }
     }
@@ -40,9 +41,7 @@ namespace cpptrace {
         try { // try/catch can never be hit but it's needed to prevent TCO
             return generate_raw_trace(skip + 1, max_depth);
         } catch(...) {
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return raw_trace{};
         }
     }
@@ -51,9 +50,7 @@ namespace cpptrace {
         try {
             return object_trace{detail::get_frames_object_info(frames)};
         } catch(...) { // NOSONAR
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return object_trace{};
         }
     }
@@ -66,9 +63,7 @@ namespace cpptrace {
             }
             return {std::move(trace)};
         } catch(...) { // NOSONAR
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return stacktrace{};
         }
     }
@@ -86,9 +81,7 @@ namespace cpptrace {
         try { // try/catch can never be hit but it's needed to prevent TCO
             return generate_object_trace(skip + 1);
         } catch(...) {
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return object_trace{};
         }
     }
@@ -98,9 +91,7 @@ namespace cpptrace {
         try { // try/catch can never be hit but it's needed to prevent TCO
             return generate_object_trace(skip + 1, max_depth);
         } catch(...) {
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return object_trace{};
         }
     }
@@ -113,9 +104,7 @@ namespace cpptrace {
             }
             return {std::move(trace)};
         } catch(...) { // NOSONAR
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return stacktrace();
         }
     }
@@ -149,9 +138,7 @@ namespace cpptrace {
         try { // try/catch can never be hit but it's needed to prevent TCO
             return generate_trace(skip + 1);
         } catch(...) {
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return stacktrace{};
         }
     }
@@ -161,9 +148,7 @@ namespace cpptrace {
         try { // try/catch can never be hit but it's needed to prevent TCO
             return generate_trace(skip + 1, max_depth);
         } catch(...) {
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return stacktrace{};
         }
     }
@@ -221,9 +206,7 @@ namespace cpptrace {
         try {
             return raw_trace{detail::capture_frames(skip + 1, SIZE_MAX)};
         } catch(...) { // NOSONAR
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return raw_trace{};
         }
     }
@@ -233,9 +216,7 @@ namespace cpptrace {
         try {
             return raw_trace{detail::capture_frames(skip + 1, max_depth)};
         } catch(...) { // NOSONAR
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return raw_trace{};
         }
     }
@@ -245,9 +226,7 @@ namespace cpptrace {
         try { // try/catch can never be hit but it's needed to prevent TCO
             return detail::safe_capture_frames(buffer, size, skip + 1, SIZE_MAX);
         } catch(...) {
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return 0;
         }
     }
@@ -262,9 +241,7 @@ namespace cpptrace {
         try { // try/catch can never be hit but it's needed to prevent TCO
             return detail::safe_capture_frames(buffer, size, skip + 1, max_depth);
         } catch(...) {
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return 0;
         }
     }
@@ -274,9 +251,7 @@ namespace cpptrace {
         try {
             return object_trace{detail::get_frames_object_info(detail::capture_frames(skip + 1, SIZE_MAX))};
         } catch(...) { // NOSONAR
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return object_trace{};
         }
     }
@@ -286,9 +261,7 @@ namespace cpptrace {
         try {
             return object_trace{detail::get_frames_object_info(detail::capture_frames(skip + 1, max_depth))};
         } catch(...) { // NOSONAR
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return object_trace{};
         }
     }
@@ -298,9 +271,7 @@ namespace cpptrace {
         try { // try/catch can never be hit but it's needed to prevent TCO
             return generate_trace(skip + 1, SIZE_MAX);
         } catch(...) {
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return stacktrace{};
         }
     }
@@ -315,9 +286,7 @@ namespace cpptrace {
             }
             return {std::move(trace)};
         } catch(...) { // NOSONAR
-            if(!detail::should_absorb_trace_exceptions()) {
-                throw;
-            }
+            detail::log_and_maybe_propagate_exception(std::current_exception());
             return stacktrace();
         }
     }
@@ -337,4 +306,16 @@ namespace cpptrace {
     bool can_get_safe_object_frame() {
         return detail::has_get_safe_object_frame();
     }
-}
+
+    void register_jit_object(const char* ptr, std::size_t size) {
+        detail::register_jit_object(ptr, size);
+    }
+
+    void unregister_jit_object(const char* ptr) {
+        detail::unregister_jit_object(ptr);
+    }
+
+    void clear_all_jit_objects() {
+        detail::clear_all_jit_objects();
+    }
+CPPTRACE_END_NAMESPACE

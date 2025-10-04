@@ -3,16 +3,61 @@
 
 #include "utils/optional.hpp"
 #include "utils/utils.hpp"
+#include "utils/replace_all.hpp"
 #include "snippets/snippet.hpp"
 
-#include <memory>
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <functional>
 #include <iostream>
 #include <sstream>
+#include <regex>
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
+    std::string basename(const std::string& path) {
+        return detail::basename(path, true);
+    }
+
+    std::string prettify_symbol(std::string symbol) {
+        // > > -> >> replacement
+        // could put in analysis:: but the replacement is basic and this is more convenient for
+        // using in the stringifier too
+        detail::replace_all_dynamic(symbol, "> >", ">>");
+        // "," -> ", " and " ," -> ", "
+        static const std::regex comma_re(R"(\s*,\s*)");
+        detail::replace_all(symbol, comma_re, ", ");
+        // class C -> C for msvc
+        static const std::regex class_re(R"(\b(class|struct)\s+)");
+        detail::replace_all(symbol, class_re, "");
+        // `anonymous namespace' -> (anonymous namespace) for msvc
+        // this brings it in-line with other compilers and prevents any tokenization/highlighting issues
+        static const std::regex msvc_anonymous_namespace("`anonymous namespace'");
+        detail::replace_all(symbol, msvc_anonymous_namespace, "(anonymous namespace)");
+        // rules to replace std::basic_string -> std::string and std::basic_string_view -> std::string
+        // rule to replace ", std::allocator<whatever>"
+        static const std::pair<std::regex, std::string> basic_string = {
+            std::regex(R"(std(::[a-zA-Z0-9_]+)?::basic_string<char)"), "std::string"
+        };
+        detail::replace_all_template(symbol, basic_string);
+        static const std::pair<std::regex, std::string> basic_string_view = {
+            std::regex(R"(std(::[a-zA-Z0-9_]+)?::basic_string_view<char)"), "std::string_view"
+        };
+        detail::replace_all_template(symbol, basic_string_view);
+        static const std::pair<std::regex, std::string> allocator = {
+            std::regex(R"(,\s*std(::[a-zA-Z0-9_]+)?::allocator<)"), ""
+        };
+        detail::replace_all_template(symbol, allocator);
+        static const std::pair<std::regex, std::string> default_delete = {
+            std::regex(R"(,\s*std(::[a-zA-Z0-9_]+)?::default_delete<)"), ""
+        };
+        detail::replace_all_template(symbol, default_delete);
+        // replace std::__cxx11 -> std:: for gcc dual abi
+        // https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
+        detail::replace_all_dynamic(symbol, "std::__cxx11::", "std::");
+        return symbol;
+    }
+
     class formatter::impl {
         struct {
             std::string header = "Stack trace (most recent call first):";
@@ -20,10 +65,14 @@ namespace cpptrace {
             address_mode addresses = address_mode::raw;
             path_mode paths = path_mode::full;
             bool snippets = false;
+            bool break_before_filename = false;
             int context_lines = 2;
             bool columns = true;
+            symbol_mode symbols = symbol_mode::full;
             bool show_filtered_frames = true;
+            bool hide_exception_machinery = true;
             std::function<bool(const stacktrace_frame&)> filter;
+            std::function<stacktrace_frame(stacktrace_frame)> transform;
         } options;
 
     public:
@@ -48,22 +97,38 @@ namespace cpptrace {
         void columns(bool columns) {
             options.columns = columns;
         }
+        void symbols(symbol_mode mode) {
+            options.symbols = mode;
+        }
         void filtered_frame_placeholders(bool show) {
             options.show_filtered_frames = show;
         }
         void filter(std::function<bool(const stacktrace_frame&)> filter) {
             options.filter = filter;
         }
+        void transform(std::function<stacktrace_frame(stacktrace_frame)> transform) {
+            options.transform = std::move(transform);
+        }
+        void break_before_filename(bool do_break) {
+            options.break_before_filename = do_break;
+        }
+        void hide_exception_machinery(bool do_hide) {
+            options.hide_exception_machinery = do_hide;
+        }
 
-        std::string format(const stacktrace_frame& frame, detail::optional<bool> color_override = detail::nullopt) const {
+        std::string format(
+            const stacktrace_frame& frame,
+            detail::optional<bool> color_override = detail::nullopt,
+            size_t filename_indent = 0
+        ) const {
             std::ostringstream oss;
-            print_frame_inner(oss, frame, color_override.value_or(options.color == color_mode::always));
+            print_internal(oss, frame, color_override.value_or(options.color == color_mode::always), filename_indent);
             return std::move(oss).str();
         }
 
         std::string format(const stacktrace& trace, detail::optional<bool> color_override = detail::nullopt) const {
             std::ostringstream oss;
-            print_internal(oss, trace, false, color_override);
+            print_internal(oss, trace, color_override.value_or(options.color == color_mode::always));
             return std::move(oss).str();
         }
 
@@ -73,16 +138,20 @@ namespace cpptrace {
         void print(
             std::ostream& stream,
             const stacktrace_frame& frame,
-            detail::optional<bool> color_override = detail::nullopt
+            detail::optional<bool> color_override = detail::nullopt,
+            size_t filename_indent = 0
         ) const {
-            print_frame_internal(stream, frame, color_override);
+            print_internal(stream, frame, color_override, filename_indent);
+            stream << "\n";
         }
         void print(
             std::FILE* file,
             const stacktrace_frame& frame,
-            detail::optional<bool> color_override = detail::nullopt
+            detail::optional<bool> color_override = detail::nullopt,
+            size_t filename_indent = 0
         ) const {
-            auto str = format(frame, color_override);
+            auto str = format(frame, color_override, filename_indent);
+            str += "\n";
             std::fwrite(str.data(), 1, str.size(), file);
         }
 
@@ -94,7 +163,8 @@ namespace cpptrace {
             const stacktrace& trace,
             detail::optional<bool> color_override = detail::nullopt
         ) const {
-            print_internal(stream, trace, true, color_override);
+            print_internal(stream, trace, color_override);
+            stream << "\n";
         }
         void print(
             std::FILE* file,
@@ -102,10 +172,28 @@ namespace cpptrace {
             detail::optional<bool> color_override = detail::nullopt
         ) const {
             auto str = format(trace, color_override);
+            str += "\n";
             std::fwrite(str.data(), 1, str.size(), file);
         }
 
     private:
+        struct color_setting {
+            bool color;
+            color_setting(bool color) : color(color) {}
+            detail::string_view reset() const {
+                return color ? RESET : "";
+            }
+            detail::string_view green() const {
+                return color ? GREEN : "";
+            }
+            detail::string_view yellow() const {
+                return color ? YELLOW : "";
+            }
+            detail::string_view blue() const {
+                return color ? BLUE : "";
+            }
+        };
+
         bool stream_is_tty(std::ostream& stream) const {
             // not great, but it'll have to do
             return (&stream == &std::cout && isatty(stdout_fileno))
@@ -125,42 +213,81 @@ namespace cpptrace {
                 (!color_override || color_override.unwrap() != false) &&
                 stream_is_tty(stream)
             ) {
-                detail::enable_virtual_terminal_processing_if_needed();
                 do_color = true;
             }
             return do_color;
         }
 
-        void print_internal(std::ostream& stream, const stacktrace& trace, bool newline_at_end, detail::optional<bool> color_override) const {
-            bool do_color = should_do_color(stream, color_override);
-            maybe_ensure_virtual_terminal_processing(stream, do_color);
-            print_internal(stream, trace, newline_at_end, do_color);
+        size_t get_trace_start(const stacktrace& trace) const {
+            if(!options.hide_exception_machinery) {
+                return 0;
+            }
+            // Look for c++ exception machinery and skip it if it's present, otherwise start at the beginning
+            // On itanium this is identifiable by __cxa_throw
+            // https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html 2.4.1
+            // On windows this is identifiable by CxxThrowException (maybe with an underscore?)
+            // https://www.youtube.com/watch?v=COEv2kq_Ht8 40:10
+            // https://github.com/CppCon/CppCon2018/blob/master/Presentations/unwinding_the_stack_exploring_how_cpp_exceptions_work_on_windows/unwinding_the_stack_exploring_how_cpp_exceptions_work_on_windows__james_mcnellis__cppcon_2018.pdf slide 157
+            // https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/cxxthrowexception?view=msvc-170
+            auto it = std::find_if(trace.begin(), trace.end(), [] (const stacktrace_frame& frame) {
+                return frame.symbol == "__cxa_throw"
+                    || frame.symbol == "CxxThrowException"
+                    || frame.symbol == "_CxxThrowException";
+            });
+            return it == trace.end() ? 0 : it - trace.begin() + 1;
         }
 
-        void print_internal(std::ostream& stream, const stacktrace& trace, bool newline_at_end, bool color) const {
+        void print_internal(std::ostream& stream, const stacktrace_frame& input_frame, detail::optional<bool> color_override, size_t col_indent) const {
+            bool color = should_do_color(stream, color_override);
+            maybe_ensure_virtual_terminal_processing(stream, color);
+            detail::optional<stacktrace_frame> transformed_frame;
+            if(options.transform) {
+                transformed_frame = options.transform(input_frame);
+            }
+            const stacktrace_frame& frame = options.transform ? transformed_frame.unwrap() : input_frame;
+            write_frame(stream, frame, color, col_indent);
+        }
+
+        void print_internal(std::ostream& stream, const stacktrace& trace, detail::optional<bool> color_override) const {
+            bool color = should_do_color(stream, color_override);
+            maybe_ensure_virtual_terminal_processing(stream, color);
+            write_trace(stream, trace, color);
+        }
+
+
+        void write_trace(std::ostream& stream, const stacktrace& trace, bool color) const {
             if(!options.header.empty()) {
                 stream << options.header << '\n';
             }
-            std::size_t counter = 0;
             const auto& frames = trace.frames;
             if(frames.empty()) {
-                stream << "<empty trace>\n";
+                stream << "<empty trace>";
                 return;
             }
             const auto frame_number_width = detail::n_digits(static_cast<int>(frames.size()) - 1);
-            for(const auto& frame : frames) {
-                if(options.filter && !options.filter(frame)) {
-                    if(!options.show_filtered_frames) {
-                        counter++;
-                        continue;
-                    }
-                    print_placeholder_frame(stream, frame_number_width, counter);
+            std::size_t counter = 0;
+            for(size_t i = get_trace_start(trace); i < frames.size(); ++i) {
+                detail::optional<stacktrace_frame> transformed_frame;
+                if(options.transform) {
+                    transformed_frame = options.transform(frames[i]);
+                }
+                const stacktrace_frame& frame = options.transform ? transformed_frame.unwrap() : frames[i];
+                bool filter_out_frame = options.filter && !options.filter(frame);
+                if(filter_out_frame && !options.show_filtered_frames) {
+                    counter++;
+                    continue;
+                }
+
+                size_t filename_indent = write_frame_number(stream, frame_number_width, counter);
+                if(filter_out_frame) {
+                    microfmt::print(stream, "(filtered)");
                 } else {
-                    print_frame_internal(stream, frame, color, frame_number_width, counter);
+                    write_frame(stream, frame, color, filename_indent);
                     if(frame.line.has_value() && !frame.filename.empty() && options.snippets) {
                         auto snippet = detail::get_snippet(
                             frame.filename,
                             frame.line.value(),
+                            frame.column,
                             options.context_lines,
                             color
                         );
@@ -170,65 +297,87 @@ namespace cpptrace {
                         }
                     }
                 }
-                if(newline_at_end || &frame != &frames.back()) {
+                if(i + 1 != frames.size()) {
                     stream << '\n';
                 }
                 counter++;
             }
         }
 
-        void print_frame_internal(
-            std::ostream& stream,
-            const stacktrace_frame& frame,
-            bool color,
-            unsigned frame_number_width,
-            std::size_t counter
-        ) const {
+        /// Write the frame number, and return the number of characters written
+        size_t write_frame_number(std::ostream& stream, unsigned int frame_number_width, size_t counter) const
+        {
             microfmt::print(stream, "#{<{}} ", frame_number_width, counter);
-            print_frame_inner(stream, frame, color);
+            return 2 + frame_number_width;
         }
 
-        void print_placeholder_frame(std::ostream& stream, unsigned frame_number_width, std::size_t counter) const {
-            microfmt::print(stream, "#{<{}} (filtered)", frame_number_width, counter);
-        }
-
-        void print_frame_internal(
-            std::ostream& stream,
-            const stacktrace_frame& frame,
-            detail::optional<bool> color_override
-        ) const {
-            bool do_color = should_do_color(stream, color_override);
-            maybe_ensure_virtual_terminal_processing(stream, do_color);
-            print_frame_inner(stream, frame, do_color);
-        }
-
-        void print_frame_inner(std::ostream& stream, const stacktrace_frame& frame, bool color) const {
-            const auto reset  = color ? RESET : "";
-            const auto green  = color ? GREEN : "";
-            const auto yellow = color ? YELLOW : "";
-            const auto blue   = color ? BLUE : "";
-            if(frame.is_inline) {
-                microfmt::print(stream, "{<{}}", 2 * sizeof(frame_ptr) + 2, "(inlined)");
-            } else {
-                auto address = options.addresses == address_mode::raw ? frame.raw_address : frame.object_address;
-                microfmt::print(stream, "{}0x{>{}:0h}{}", blue, 2 * sizeof(frame_ptr), address, reset);
+        void write_frame(std::ostream& stream, const stacktrace_frame& frame, color_setting color, size_t col) const {
+            col += write_address(stream, frame, color);
+            if(frame.is_inline || options.addresses != address_mode::none) {
+                stream << ' ';
+                col += 1;
             }
             if(!frame.symbol.empty()) {
-                microfmt::print(stream, " in {}{}{}", yellow, frame.symbol, reset);
+                write_symbol(stream, frame, color);
+            }
+            if(!frame.symbol.empty() && !frame.filename.empty()) {
+                if(options.break_before_filename) {
+                    microfmt::print(stream, "\n{<{}}", col, "");
+                } else {
+                    stream << ' ';
+                }
             }
             if(!frame.filename.empty()) {
-                microfmt::print(
-                    stream,
-                    " at {}{}{}",
-                    green,
-                    options.paths == path_mode::full ? frame.filename : detail::basename(frame.filename, true),
-                    reset
-                );
-                if(frame.line.has_value()) {
-                    microfmt::print(stream, ":{}{}{}", blue, frame.line.value(), reset);
-                    if(frame.column.has_value() && options.columns) {
-                        microfmt::print(stream, ":{}{}{}", blue, frame.column.value(), reset);
-                    }
+                write_source_location(stream, frame, color);
+            }
+        }
+
+        /// Write the address of the frame, return the number of characters written
+        size_t write_address(std::ostream& stream, const stacktrace_frame& frame, color_setting color) const {
+            if(frame.is_inline) {
+                microfmt::print(stream, "{<{}}", 2 * sizeof(frame_ptr) + 2, "(inlined)");
+                return 2 * sizeof(frame_ptr) + 2;
+            } else if(options.addresses != address_mode::none) {
+                auto address = options.addresses == address_mode::raw ? frame.raw_address : frame.object_address;
+                microfmt::print(stream, "{}0x{>{}:0h}{}", color.blue(), 2 * sizeof(frame_ptr), address, color.reset());
+                return 2 * sizeof(frame_ptr) + 2;
+            }
+            return 0;
+        }
+
+        void write_symbol(std::ostream& stream, const stacktrace_frame& frame, color_setting color) const {
+            detail::optional<std::string> maybe_stored_string;
+            detail::string_view symbol;
+            switch(options.symbols) {
+                case symbol_mode::full:
+                    symbol = frame.symbol;
+                    break;
+                case symbol_mode::pruned:
+                    maybe_stored_string = prune_symbol(frame.symbol);
+                    symbol = maybe_stored_string.unwrap();
+                    break;
+                case symbol_mode::pretty:
+                    maybe_stored_string = prettify_symbol(frame.symbol);
+                    symbol = maybe_stored_string.unwrap();
+                    break;
+                default:
+                    PANIC("Unhandled symbol mode");
+            }
+            microfmt::print(stream, "in {}{}{}", color.yellow(), symbol, color.reset());
+        }
+
+        void write_source_location(std::ostream& stream, const stacktrace_frame& frame, color_setting color) const {
+            microfmt::print(
+                stream,
+                "at {}{}{}",
+                color.green(),
+                options.paths == path_mode::full ? frame.filename : detail::basename(frame.filename, true),
+                color.reset()
+            );
+            if(frame.line.has_value()) {
+                microfmt::print(stream, ":{}{}{}", color.blue(), frame.line.value(), color.reset());
+                if(frame.column.has_value() && options.columns) {
+                    microfmt::print(stream, ":{}{}{}", color.blue(), frame.column.value(), color.reset());
                 }
             }
         }
@@ -284,6 +433,10 @@ namespace cpptrace {
         pimpl->columns(columns);
         return *this;
     }
+    formatter& formatter::symbols(symbol_mode mode) {
+        pimpl->symbols(mode);
+        return *this;
+    }
     formatter& formatter::filtered_frame_placeholders(bool show) {
         pimpl->filtered_frame_placeholders(show);
         return *this;
@@ -292,12 +445,27 @@ namespace cpptrace {
         pimpl->filter(std::move(filter));
         return *this;
     }
+    formatter& formatter::transform(std::function<stacktrace_frame(stacktrace_frame)> transform) {
+        pimpl->transform(std::move(transform));
+        return *this;
+    }
+    formatter& formatter::break_before_filename(bool do_break) {
+        pimpl->break_before_filename(do_break);
+        return *this;
+    }
+    formatter& formatter::hide_exception_machinery(bool do_hide) {
+        pimpl->hide_exception_machinery(do_hide);
+        return *this;
+    }
 
     std::string formatter::format(const stacktrace_frame& frame) const {
         return pimpl->format(frame);
     }
     std::string formatter::format(const stacktrace_frame& frame, bool color) const {
         return pimpl->format(frame, color);
+    }
+    std::string formatter::format(const stacktrace_frame& frame, bool color, size_t filename_indent) const {
+        return pimpl->format(frame, color, filename_indent);
     }
 
     std::string formatter::format(const stacktrace& trace) const {
@@ -338,15 +506,21 @@ namespace cpptrace {
     void formatter::print(std::ostream& stream, const stacktrace_frame& frame, bool color) const {
         pimpl->print(stream, frame, color);
     }
+    void formatter::print(std::ostream& stream, const stacktrace_frame& frame, bool color, size_t filename_indent) const {
+        pimpl->print(stream, frame, color, filename_indent);
+    }
     void formatter::print(std::FILE* file, const stacktrace_frame& frame) const {
         pimpl->print(file, frame);
     }
     void formatter::print(std::FILE* file, const stacktrace_frame& frame, bool color) const {
         pimpl->print(file, frame, color);
     }
+    void formatter::print(std::FILE* file, const stacktrace_frame& frame, bool color, size_t filename_indent) const {
+        pimpl->print(file, frame, color, filename_indent);
+    }
 
     const formatter& get_default_formatter() {
         static formatter formatter;
         return formatter;
     }
-}
+CPPTRACE_END_NAMESPACE

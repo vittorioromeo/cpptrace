@@ -1,5 +1,7 @@
 #include <cpptrace/basic.hpp>
+#include <cpptrace/utils.hpp>
 
+#include "cpptrace/forward.hpp"
 #include "symbols/symbols.hpp"
 
 #include <vector>
@@ -8,7 +10,7 @@
 #include "utils/error.hpp"
 #include "binary/object.hpp"
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     template<typename CollatedVec, typename Entry>
     std::unordered_map<std::string, CollatedVec> collate_frames(
@@ -18,14 +20,13 @@ namespace detail {
         std::unordered_map<std::string, CollatedVec> entries;
         for(std::size_t i = 0; i < frames.size(); i++) {
             const auto& entry = frames[i];
-            // If libdl fails to find the shared object for a frame, the path will be empty. I've observed this
-            // on macos when looking up the shared object containing `start`.
-            if(!entry.object_path.empty()) {
-                entries[entry.object_path].emplace_back(
-                    entry,
-                    trace[i]
-                );
-            }
+            // The path may be empty. This can happens if libdl fails to find the shared object for a frame, e.g. I've
+            // observed this on macos when looking up the shared object containing `start`.
+            // It can also happen for JIT frames. As such, we don't exclude them from the output.
+            entries[entry.object_path].emplace_back(
+                entry,
+                trace[i]
+            );
         }
         return entries;
     }
@@ -82,6 +83,8 @@ namespace detail {
             }
         }
     }
+
+    // TODO: Symbol resolution code should probably handle when object addresses are 0
 
     std::vector<stacktrace_frame> resolve_frames(const std::vector<object_frame>& frames) {
         #if defined(CPPTRACE_GET_SYMBOLS_WITH_LIBDWARF) && defined(CPPTRACE_GET_SYMBOLS_WITH_DBGHELP)
@@ -150,4 +153,4 @@ namespace detail {
         #endif
     }
 }
-}
+CPPTRACE_END_NAMESPACE

@@ -18,10 +18,12 @@
 #include "utils/optional.hpp"
 #include "utils/result.hpp"
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     bool isatty(int fd);
     int fileno(std::FILE* stream);
+
+    void enable_virtual_terminal_processing_if_needed() noexcept;
 
     inline std::vector<std::string> split(const std::string& str, const std::string& delims) {
         std::vector<std::string> vec;
@@ -50,7 +52,7 @@ namespace detail {
         return str;
     }
 
-    // first value in a sorted range such that *it <= value
+    // closest value in a sorted range such that *it <= value
     template<typename ForwardIt, typename T>
     ForwardIt first_less_than_or_equal(ForwardIt begin, ForwardIt end, const T& value) {
         auto it = std::upper_bound(begin, end, value);
@@ -61,7 +63,7 @@ namespace detail {
         return end;
     }
 
-    // first value in a sorted range such that *it <= value
+    // closest value in a sorted range such that *it <= value
     template<typename ForwardIt, typename T, typename Compare>
     ForwardIt first_less_than_or_equal(ForwardIt begin, ForwardIt end, const T& value, Compare compare) {
         auto it = std::upper_bound(begin, end, value, compare);
@@ -141,14 +143,45 @@ namespace detail {
         return byte_swapper<T, sizeof(T)>{}(value);
     }
 
-    void enable_virtual_terminal_processing_if_needed() noexcept;
+    template<
+        typename T,
+        typename std::enable_if<std::is_arithmetic<T>::value && !std::is_signed<T>::value, int>::type = 0
+    >
+    constexpr bool is_positive_power_of_two(T value) {
+        return (value != 0) && (value & (value - 1)) == 0;
+    }
+
+    template<
+        typename T,
+        typename std::enable_if<std::is_arithmetic<T>::value && std::is_signed<T>::value, int>::type = 0
+    >
+    bool is_positive_power_of_two(T value) {
+        if(value < 0) {
+            return false;
+        }
+        return is_positive_power_of_two(static_cast<typename std::make_unsigned<T>::type>(value));
+    }
 
     constexpr unsigned n_digits(unsigned value) noexcept {
         return value < 10 ? 1 : 1 + n_digits(value / 10);
     }
 
+    #if defined(__GNUC__) && (__GNUC__ < 5) && !defined(__clang__)
+    template<typename T>
+    using is_trivially_copyable = std::is_trivial<T>;
+    #else
+    template<typename T>
+    using is_trivially_copyable = std::is_trivially_copyable<T>;
+    #endif
+
     // TODO: Re-evaluate use of off_t
-    template<typename T, typename std::enable_if<std::is_trivial<T>::value, int>::type = 0>
+    template<
+        typename T,
+        typename std::enable_if<
+            std::is_standard_layout<T>::value && is_trivially_copyable<T>::value,
+            int
+        >::type = 0
+    >
     Result<T, internal_error> load_bytes(std::FILE* object_file, off_t offset) {
         T object;
         if(std::fseek(object_file, offset, SEEK_SET) != 0) {
@@ -161,15 +194,15 @@ namespace detail {
     }
 
     // shamelessly stolen from stackoverflow
-    bool directory_exists(const std::string& path);
+    bool directory_exists(cstring_view path);
 
-    inline std::string basename(const std::string& path, bool maybe_windows = false) {
+    inline std::string basename(cstring_view path, bool maybe_windows = false) {
         // Assumes no trailing /'s
         auto pos = path.find_last_of(maybe_windows ? "/\\" : "/");
-        if(pos == std::string::npos) {
-            return path;
+        if(pos == cstring_view::npos) {
+            return std::string(path);
         } else {
-            return path.substr(pos + 1);
+            return std::string(path.substr(pos + 1));
         }
     }
 
@@ -196,6 +229,9 @@ namespace detail {
         return old;
     }
 
+    template<typename...>
+    using void_t = void;
+
     struct monostate {};
 
     // TODO: Rework some stuff here. Not sure deleters should be optional or moved.
@@ -208,7 +244,7 @@ namespace detail {
         //  <= 19.23 msvc also appears to fail (but for a different reason https://godbolt.org/z/6Y5EvdWPK)
         //  <= 19.39 msvc also has trouble with it for different reasons https://godbolt.org/z/aPPPT7z3z
         typename std::enable_if<
-            std::is_standard_layout<T>::value && std::is_trivial<T>::value,
+            std::is_standard_layout<T>::value && is_trivially_copyable<T>::value,
             int
         >::type = 0,
         typename std::enable_if<
@@ -272,6 +308,9 @@ namespace detail {
         T& operator*() {
             return *ptr;
         }
+        T* get() {
+            return ptr;
+        }
     };
 
     template<typename F>
@@ -304,6 +343,6 @@ namespace detail {
         return scope_guard<F>(std::forward<F>(f));
     }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

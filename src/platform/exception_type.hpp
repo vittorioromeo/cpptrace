@@ -12,7 +12,7 @@
  #include "demangle/demangle.hpp"
 #endif
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     inline std::string exception_type_name() {
         #if defined(CPPTRACE_HAS_CXX_EXCEPTION_TYPE) && (IS_LIBSTDCXX || IS_LIBCXX)
@@ -23,6 +23,6 @@ namespace detail {
         #endif
     }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

@@ -15,7 +15,7 @@
 #endif
 #include <windows.h>
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     template<typename T, typename std::enable_if<std::is_integral<T>::value, int>::type = 0>
     T pe_byteswap_if_needed(T value) {
@@ -27,7 +27,7 @@ namespace detail {
         }
     }
 
-    Result<std::uintptr_t, internal_error> pe_get_module_image_base(const std::string& object_path) {
+    Result<std::uintptr_t, internal_error> pe_get_module_image_base(cstring_view object_path) {
         // https://drive.google.com/file/d/0B3_wGJkuWLytbnIxY1J5WUs4MEk/view?pli=1&resourcekey=0-n5zZ2UW39xVTH8ZSu6C2aQ
         // https://0xrick.github.io/win-internals/pe3/
         // Endianness should always be little for dos and pe headers
@@ -71,7 +71,7 @@ namespace detail {
         WORD optional_header_magic = pe_byteswap_if_needed(optional_header_magic_raw.unwrap_value());
         VERIFY(
             optional_header_magic == IMAGE_NT_OPTIONAL_HDR_MAGIC,
-            ("PE file does not match expected bit-mode " + object_path).c_str()
+            ("PE file does not match expected bit-mode " + std::string(object_path)).c_str()
         );
         // finally get image base
         if(optional_header_magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
@@ -84,7 +84,7 @@ namespace detail {
         } else {
             // 64 bit
             // I get an "error: 'QWORD' was not declared in this scope" for some reason when using QWORD
-            auto bytes = load_bytes<unsigned __int64>(file, nt_header_offset + 0x18 + 0x18); // optional header + 0x18
+            auto bytes = load_bytes<std::uint64_t>(file, nt_header_offset + 0x18 + 0x18); // optional header + 0x18
             if(!bytes) {
                 return std::move(bytes).unwrap_error();
             }
@@ -92,6 +92,6 @@ namespace detail {
         }
     }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

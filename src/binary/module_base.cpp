@@ -19,7 +19,7 @@
  #include "binary/pe.hpp"
 #endif
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     #if IS_LINUX
     Result<std::uintptr_t, internal_error> get_module_image_base(const std::string& object_path) {
@@ -94,4 +94,4 @@ namespace detail {
     }
     #endif
 }
-}
+CPPTRACE_END_NAMESPACE

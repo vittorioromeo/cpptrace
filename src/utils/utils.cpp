@@ -1,4 +1,5 @@
 #include "utils/utils.hpp"
+#include "utils/string_view.hpp"
 
 #if IS_WINDOWS
  #include <io.h>
@@ -11,7 +12,7 @@
  #include <unistd.h>
 #endif
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
 
     bool isatty(int fd) {
@@ -46,7 +47,7 @@ namespace detail {
         #endif
     }
 
-    bool directory_exists(const std::string& path) {
+    bool directory_exists(cstring_view path) {
         #if IS_WINDOWS
          DWORD dwAttrib = GetFileAttributesA(path.c_str());
          return dwAttrib != INVALID_FILE_ATTRIBUTES && (dwAttrib & FILE_ATTRIBUTE_DIRECTORY);
@@ -57,4 +58,4 @@ namespace detail {
     }
 
 }
-}
+CPPTRACE_END_NAMESPACE

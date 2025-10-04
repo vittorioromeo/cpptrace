@@ -14,7 +14,7 @@
 
 #define CPPTRACE_MAX_PATH MAX_PATH
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     inline const char* program_name() {
         static std::mutex mutex;
@@ -34,7 +34,7 @@ namespace detail {
         return valid && !name.empty() ? name.c_str() : nullptr;
     }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #elif IS_APPLE
 
@@ -44,7 +44,7 @@ namespace detail {
 
 #define CPPTRACE_MAX_PATH CPPTRACE_PATH_MAX
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     inline const char* program_name() {
         static std::mutex mutex;
@@ -64,17 +64,16 @@ namespace detail {
         return valid && !name.empty() ? name.c_str() : nullptr;
     }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #elif IS_LINUX
 
-#include <linux/limits.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #define CPPTRACE_MAX_PATH CPPTRACE_PATH_MAX
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     inline const char* program_name() {
         static std::mutex mutex;
@@ -96,7 +95,7 @@ namespace detail {
         return valid && !name.empty() ? name.c_str() : nullptr;
     }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif
 

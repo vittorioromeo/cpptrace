@@ -7,7 +7,7 @@
 #include <list>
 #include <unordered_map>
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     template<typename K, typename V>
     class lru_cache {
@@ -103,6 +103,6 @@ namespace detail {
         }
     };
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

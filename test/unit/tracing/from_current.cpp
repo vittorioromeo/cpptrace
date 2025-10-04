@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <string_view>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -7,12 +6,17 @@
 #include <gmock/gmock.h>
 #include <gmock/gmock-matchers.h>
 
+#include "common.hpp"
+#include "utils/utils.hpp"
+
+#ifdef TEST_MODULE
+import cpptrace;
+
+#include <cpptrace/from_current_macros.hpp>
+#else
 #include <cpptrace/cpptrace.hpp>
 #include <cpptrace/from_current.hpp>
-
-#include "common.hpp"
-
-using namespace std::literals;
+#endif
 
 
 static volatile int truthyFromCurrent = 2;
@@ -42,12 +46,18 @@ CPPTRACE_FORCE_NO_INLINE int stacktrace_from_current_1(std::vector<int>& line_nu
 
 TEST(FromCurrent, Basic) {
     std::vector<int> line_numbers;
+    bool does_enter_catch = false;
+    auto guard = cpptrace::detail::scope_exit([&] {
+        EXPECT_TRUE(does_enter_catch);
+    });
     CPPTRACE_TRY {
         line_numbers.insert(line_numbers.begin(), __LINE__ + 1);
         static volatile int tco_guard = stacktrace_from_current_1(line_numbers);
         (void)tco_guard;
     } CPPTRACE_CATCH(const std::runtime_error& e) {
-        EXPECT_EQ(e.what(), "foobar"sv);
+        does_enter_catch = true;
+        EXPECT_FALSE(cpptrace::current_exception_was_rethrown());
+        EXPECT_EQ(e.what(), std::string("foobar"));
         const auto& trace = cpptrace::from_current_exception();
         ASSERT_GE(trace.frames.size(), 4);
         auto it = std::find_if(
@@ -57,7 +67,7 @@ TEST(FromCurrent, Basic) {
                 return frame.symbol.find("stacktrace_from_current_3") != std::string::npos;
             }
         );
-        ASSERT_NE(it, trace.frames.end());
+        ASSERT_NE(it, trace.frames.end()) << trace;
         size_t i = static_cast<size_t>(it - trace.frames.begin());
         int j = 0;
         ASSERT_LT(i, trace.frames.size());
@@ -91,15 +101,16 @@ TEST(FromCurrent, Basic) {
 
 TEST(FromCurrent, CorrectHandler) {
     std::vector<int> line_numbers;
+    bool wrong_handler = false;
     CPPTRACE_TRY {
         CPPTRACE_TRY {
             line_numbers.insert(line_numbers.begin(), __LINE__ + 1);
             stacktrace_from_current_1(line_numbers);
         } CPPTRACE_CATCH(const std::logic_error&) {
-            FAIL();
+            wrong_handler = true;
         }
     } CPPTRACE_CATCH(const std::exception& e) {
-        EXPECT_EQ(e.what(), "foobar"sv);
+        EXPECT_EQ(e.what(), std::string("foobar"));
         const auto& trace = cpptrace::from_current_exception();
         auto it = std::find_if(
             trace.frames.begin(),
@@ -118,6 +129,9 @@ TEST(FromCurrent, CorrectHandler) {
         );
         EXPECT_NE(it, trace.frames.end());
     }
+    if(wrong_handler) {
+        FAIL();
+    }
 }
 
 TEST(FromCurrent, RawTrace) {
@@ -127,7 +141,7 @@ TEST(FromCurrent, RawTrace) {
         static volatile int tco_guard = stacktrace_from_current_1(line_numbers);
         (void)tco_guard;
     } CPPTRACE_CATCH(const std::exception& e) {
-        EXPECT_EQ(e.what(), "foobar"sv);
+        EXPECT_EQ(e.what(), std::string("foobar"));
         const auto& raw_trace = cpptrace::raw_trace_from_current_exception();
         auto trace = raw_trace.resolve();
         auto it = std::find_if(
@@ -148,3 +162,92 @@ TEST(FromCurrent, RawTrace) {
         EXPECT_NE(it, trace.frames.end());
     }
 }
+
+TEST(FromCurrent, NonThrowingPath) {
+    bool does_enter_catch = false;
+    bool does_reach_end = false;
+    auto guard = cpptrace::detail::scope_exit([&] {
+        EXPECT_FALSE(does_enter_catch);
+        EXPECT_TRUE(does_reach_end);
+    });
+    CPPTRACE_TRY {
+        // pass
+    } CPPTRACE_CATCH(const std::runtime_error&) {
+        does_enter_catch = true;
+    }
+    does_reach_end = true;
+}
+
+#ifdef _MSC_VER
+
+CPPTRACE_FORCE_NO_INLINE
+int my_div_function(int x, int y) {
+    return x / y;
+}
+
+int divide_zero_filter(int code) {
+    if(code == STATUS_INTEGER_DIVIDE_BY_ZERO || code == EXCEPTION_FLT_DIVIDE_BY_ZERO) {
+        return EXCEPTION_EXECUTE_HANDLER;
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+TEST(FromCurrent, SEHBasic) {
+    bool does_enter_catch = false;
+    auto guard = cpptrace::detail::scope_exit([&] {
+        EXPECT_TRUE(does_enter_catch);
+    });
+    [&] () {
+        CPPTRACE_SEH_TRY {
+            [&] () {
+                volatile auto res = my_div_function(10, 0);
+                (void)res;
+            } ();
+        } CPPTRACE_SEH_EXCEPT(divide_zero_filter(GetExceptionCode())) {
+            [&] () {
+                does_enter_catch = true;
+                EXPECT_FALSE(cpptrace::current_exception_was_rethrown());
+                const auto& trace = cpptrace::from_current_exception();
+                auto it = std::find_if(
+                    trace.frames.begin(),
+                    trace.frames.end(),
+                    [](const cpptrace::stacktrace_frame& frame) {
+                        return frame.symbol.find("my_div_function") != std::string::npos;
+                    }
+                );
+                ASSERT_NE(it, trace.frames.end()) << trace;
+                size_t i = static_cast<size_t>(it - trace.frames.begin());
+                EXPECT_FILE(trace.frames[i].filename, "from_current.cpp");
+            } ();
+        }
+    } ();
+    EXPECT_TRUE(does_enter_catch);
+}
+
+TEST(FromCurrent, SEHCorrectHandler) {
+    bool does_enter_catch = false;
+    auto guard = cpptrace::detail::scope_exit([&] {
+        EXPECT_TRUE(does_enter_catch);
+    });
+    [&] () {
+        CPPTRACE_SEH_TRY {
+            [&] () {
+                CPPTRACE_SEH_TRY {
+                    [&] () {
+                        volatile auto res = my_div_function(10, 0);
+                        (void)res;
+                    } ();
+                } CPPTRACE_SEH_EXCEPT(EXCEPTION_CONTINUE_SEARCH) {
+                    [&] () {
+                        FAIL();
+                    } ();
+                }
+            } ();
+        } CPPTRACE_SEH_EXCEPT(divide_zero_filter(GetExceptionCode())) {
+            does_enter_catch = true;
+        }
+    } ();
+    EXPECT_TRUE(does_enter_catch);
+}
+
+#endif

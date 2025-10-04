@@ -6,7 +6,7 @@
 #include <string>
 #include <functional>
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
     class CPPTRACE_EXPORT formatter {
         class impl;
         // can't be a std::unique_ptr due to msvc awfulness with dllimport/dllexport and https://stackoverflow.com/q/4145605/15675011
@@ -44,11 +44,25 @@ namespace cpptrace {
         formatter& snippets(bool);
         formatter& snippet_context(int);
         formatter& columns(bool);
+        enum class symbol_mode {
+            // full demangled symbol
+            full,
+            // symbols are prettified to clean up some especially long template argument lists
+            pretty,
+            // template arguments and function parameters are pruned
+            pruned
+        };
+        formatter& symbols(symbol_mode);
         formatter& filtered_frame_placeholders(bool);
         formatter& filter(std::function<bool(const stacktrace_frame&)>);
+        formatter& transform(std::function<stacktrace_frame(stacktrace_frame)>);
+        formatter& break_before_filename(bool do_break = true);
+        formatter& hide_exception_machinery(bool do_hide = true);
 
         std::string format(const stacktrace_frame&) const;
         std::string format(const stacktrace_frame&, bool color) const;
+        // The last argument is the indent to use for the filename, if break_before_filename is set
+        std::string format(const stacktrace_frame&, bool color, size_t filename_indent) const;
 
         std::string format(const stacktrace&) const;
         std::string format(const stacktrace&, bool color) const;
@@ -57,8 +71,12 @@ namespace cpptrace {
         void print(const stacktrace_frame&, bool color) const;
         void print(std::ostream&, const stacktrace_frame&) const;
         void print(std::ostream&, const stacktrace_frame&, bool color) const;
+        // The last argument is the indent to use for the filename, if break_before_filename is set
+        void print(std::ostream&, const stacktrace_frame&, bool color, size_t filename_indent) const;
         void print(std::FILE*, const stacktrace_frame&) const;
         void print(std::FILE*, const stacktrace_frame&, bool color) const;
+        // The last argument is the indent to use for the filename, if break_before_filename is set
+        void print(std::FILE*, const stacktrace_frame&, bool color, size_t filename_indent) const;
 
         void print(const stacktrace&) const;
         void print(const stacktrace&, bool color) const;
@@ -69,6 +87,6 @@ namespace cpptrace {
     };
 
     CPPTRACE_EXPORT const formatter& get_default_formatter();
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

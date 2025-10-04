@@ -12,7 +12,7 @@
 
 #include <unwind.h>
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     struct unwind_state {
         std::size_t skip;
@@ -70,6 +70,6 @@ namespace detail {
         return false;
     }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

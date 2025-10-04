@@ -9,8 +9,9 @@
 #include "utils/error.hpp"
 #include "utils/optional.hpp"
 #include "options.hpp"
+#include "logging.hpp"
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     template<typename T, typename E, typename std::enable_if<!std::is_same<T, E>::value, int>::type = 0>
     class Result {
@@ -21,18 +22,21 @@ namespace detail {
         };
         enum class member { value, error };
         member active;
+        void destroy() {
+            if(active == member::value) {
+                value_.~value_type();
+            } else {
+                error_.~E();
+            }
+        }
     public:
         Result(value_type&& value) : value_(std::move(value)), active(member::value) {}
         Result(E&& error) : error_(std::move(error)), active(member::error) {
-            if(!should_absorb_trace_exceptions()) {
-                std::fprintf(stderr, "%s\n", unwrap_error().what());
-            }
+            log::debug("Error result constructed: {}", unwrap_error().what());
         }
         Result(const value_type& value) : value_(value_type(value)), active(member::value) {}
         Result(const E& error) : error_(E(error)), active(member::error) {
-            if(!should_absorb_trace_exceptions()) {
-                std::fprintf(stderr, "%s\n", unwrap_error().what());
-            }
+            log::debug("Error result constructed: {}", unwrap_error().what());
         }
         template<
             typename U = T,
@@ -52,11 +56,35 @@ namespace detail {
             }
         }
         ~Result() {
-            if(active == member::value) {
-                value_.~value_type();
-            } else {
-                error_.~E();
+            destroy();
+        }
+        Result& operator=(const Result& other) {
+            if (this != &other) {
+                destroy();
+                if(other.active == member::value) {
+                    new (&value_) value_type(other.value_);
+                } else {
+                    new (&error_) E(other.error_);
+                }
+                active = other.active;
             }
+            return *this;
+        }
+        Result& operator=(Result&& other)
+            noexcept(
+                std::is_nothrow_move_constructible<value_type>::value && std::is_nothrow_move_constructible<E>::value
+            )
+        {
+            if (this != &other) {
+                destroy();
+                if(other.active == member::value) {
+                    new (&value_) value_type(std::move(other.value_));
+                } else {
+                    new (&error_) E(std::move(other.error_));
+                }
+                active = other.active;
+            }
+            return *this;
         }
 
         bool has_value() const {
@@ -147,11 +175,11 @@ namespace detail {
 
         void drop_error() const {
             if(is_error()) {
-                std::fprintf(stderr, "%s\n", unwrap_error().what());
+                log::error(unwrap_error().what());
             }
         }
     };
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif

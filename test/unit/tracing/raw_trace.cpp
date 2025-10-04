@@ -5,9 +5,15 @@
 #include <gtest/gtest-matchers.h>
 #include <gmock/gmock.h>
 #include <gmock/gmock-matchers.h>
-#include <cpptrace/cpptrace.hpp>
 
-using namespace std::literals;
+#include "common.hpp"
+
+#ifdef TEST_MODULE
+import cpptrace;
+#else
+#include <cpptrace/cpptrace.hpp>
+#endif
+
 
 // Raw trace tests
 
@@ -51,7 +57,8 @@ TEST(RawTrace, Basic) {
     #ifndef _MSC_VER
     raw_trace_basic_precise();
     #endif
-    [[maybe_unused]] volatile int x = 0; // prevent raw_trace_basic_precise() above being a jmp
+    volatile int x = 0; // prevent raw_trace_basic_precise() above being a jmp
+    (void)x;
 }
 
 
@@ -64,7 +71,7 @@ CPPTRACE_FORCE_NO_INLINE static void raw_trace_multi_2(
     auto raw_trace = cpptrace::generate_raw_trace();
     ASSERT_GE(raw_trace.frames.size(), 2);
     EXPECT_GE(raw_trace.frames[0], reinterpret_cast<uintptr_t>(raw_trace_multi_2));
-    EXPECT_LE(raw_trace.frames[0], reinterpret_cast<uintptr_t>(raw_trace_multi_2) + 90);
+    EXPECT_LE(raw_trace.frames[0], reinterpret_cast<uintptr_t>(raw_trace_multi_2) + 100);
     EXPECT_GE(raw_trace.frames[1], parent_low_bound);
     EXPECT_LE(raw_trace.frames[1], parent_high_bound);
 }

@@ -11,7 +11,7 @@
 
 #include <execinfo.h>
 
-namespace cpptrace {
+CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     CPPTRACE_FORCE_NO_INLINE
     std::vector<frame_ptr> capture_frames(std::size_t skip, std::size_t max_depth) {
@@ -40,6 +40,6 @@ namespace detail {
         return false;
     }
 }
-}
+CPPTRACE_END_NAMESPACE
 
 #endif
