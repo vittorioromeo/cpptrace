@@ -4,6 +4,7 @@
 #include "utils/error.hpp"
 #include "utils/optional.hpp"
 #include "utils/span.hpp"
+#include "utils/UniquePtr.hpp"
 #include "binary/elf.hpp"
 #include "binary/mach-o.hpp"
 
@@ -19,7 +20,7 @@ namespace detail {
     class jit_object_manager {
         struct object_entry {
             const char* object_start;
-            std::unique_ptr<jit_object_type> object;
+            UniquePtr<jit_object_type> object;
         };
         std::vector<object_entry> objects;
 
@@ -44,7 +45,7 @@ namespace detail {
                 }
                 return;
             }
-            objects.push_back({object.data(), make_unique<jit_object_type>(std::move(object_res).unwrap_value())});
+            objects.push_back({object.data(), makeUnique<jit_object_type>(std::move(object_res).unwrap_value())});
             auto* object_file = objects.back().object.get();
             auto ranges_res = object_file->get_pc_ranges();
             if(ranges_res.is_error()) {

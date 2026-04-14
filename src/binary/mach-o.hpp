@@ -44,7 +44,7 @@ namespace detail {
         using debug_map = std::unordered_map<std::string, std::vector<debug_map_entry>>;
 
     private:
-        std::unique_ptr<base_file> file;
+        UniquePtr<base_file> file;
         std::uint32_t magic;
         cpu_type_t cputype;
         cpu_subtype_t cpusubtype;
@@ -71,11 +71,11 @@ namespace detail {
         bool tried_to_load_symbols = false;
         optional<std::vector<symbol_entry>> symbols;
 
-        mach_o(std::unique_ptr<base_file> file, std::uint32_t magic) : file(std::move(file)), magic(magic) {}
+        mach_o(UniquePtr<base_file> file, std::uint32_t magic) : file(std::move(file)), magic(magic) {}
 
         Result<monostate, internal_error> load();
 
-        static NODISCARD Result<mach_o, internal_error> open(std::unique_ptr<base_file> file);
+        static NODISCARD Result<mach_o, internal_error> open(UniquePtr<base_file> file);
 
     public:
         static NODISCARD Result<mach_o, internal_error> open(cstring_view object_path);

@@ -6,6 +6,7 @@
 #include "utils/io/base_file.hpp"
 #include "utils/span.hpp"
 #include "utils/utils.hpp"
+#include "utils/UniquePtr.hpp"
 
 #if IS_LINUX
 
@@ -17,7 +18,7 @@ CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     // TODO: make methods const and a bunch of members mutable
     class elf {
-        std::unique_ptr<base_file> file;
+        UniquePtr<base_file> file;
         bool is_little_endian;
         bool is_64;
 
@@ -73,9 +74,9 @@ namespace detail {
         bool did_load_dynamic_symtab = false;
         optional<symtab_info> dynamic_symtab;
 
-        elf(std::unique_ptr<base_file> file, bool is_little_endian, bool is_64);
+        elf(UniquePtr<base_file> file, bool is_little_endian, bool is_64);
 
-        static NODISCARD Result<elf, internal_error> open(std::unique_ptr<base_file> file);
+        static NODISCARD Result<elf, internal_error> open(UniquePtr<base_file> file);
 
     public:
         static NODISCARD Result<elf, internal_error> open(cstring_view object_path);

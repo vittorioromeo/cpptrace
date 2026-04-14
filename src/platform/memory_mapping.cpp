@@ -24,6 +24,8 @@
  #endif
 #endif
 
+#include <limits>
+
 CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     #if IS_WINDOWS

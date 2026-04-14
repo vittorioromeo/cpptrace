@@ -6,6 +6,7 @@
 #include "utils/optional.hpp"
 #include "utils/io/file.hpp"
 #include "utils/string_view.hpp"
+#include "utils/UniquePtr.hpp"
 
 #if IS_LINUX
 
@@ -22,12 +23,12 @@
 CPPTRACE_BEGIN_NAMESPACE
 namespace detail {
     elf::elf(
-        std::unique_ptr<base_file> file,
+        UniquePtr<base_file> file,
         bool is_little_endian,
         bool is_64
     ) : file(std::move(file)), is_little_endian(is_little_endian), is_64(is_64) {}
 
-    Result<elf, internal_error> elf::open(std::unique_ptr<base_file> file) {
+    Result<elf, internal_error> elf::open(UniquePtr<base_file> file) {
         // Initial checks/metadata
         auto magic = file->read<std::array<char, 4>>(0);
         if(magic.is_error()) {
@@ -62,11 +63,11 @@ namespace detail {
             return internal_error("Unable to read object file {}", object_path);
         }
         auto& file = file_res.unwrap_value();
-        return open(make_unique(std::move(file)));
+        return open(makeUnique<detail::file>(std::move(file)));
     }
 
     Result<elf, internal_error> elf::open(cbspan object) {
-        return open(make_unique<memory_file_view>(object));
+        return open(makeUnique<memory_file_view>(object));
     }
 
     Result<std::uintptr_t, internal_error> elf::get_module_image_base() {

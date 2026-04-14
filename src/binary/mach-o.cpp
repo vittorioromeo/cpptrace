@@ -4,6 +4,7 @@
 #include "utils/utils.hpp"
 #include "utils/io/file.hpp"
 #include "utils/io/memory_file_view.hpp"
+#include "utils/UniquePtr.hpp"
 
 #if IS_APPLE
 
@@ -105,7 +106,7 @@ Result<std::uintptr_t, internal_error> mach_o::get_text_vmaddr()
         "Couldn't find __TEXT section while parsing Mach-O object");
 }
 
-    Result<mach_o, internal_error> mach_o::open(std::unique_ptr<base_file> file) {
+    Result<mach_o, internal_error> mach_o::open(UniquePtr<base_file> file) {
         auto magic = file->read<std::uint32_t>(0);
         if(!magic) {
             return magic.unwrap_error();
@@ -128,11 +129,11 @@ Result<std::uintptr_t, internal_error> mach_o::get_text_vmaddr()
             return internal_error("Unable to read object file {}", object_path);
         }
         auto& file = file_res.unwrap_value();
-        return open(make_unique(std::move(file)));
+        return open(makeUnique(std::move(file)));
     }
 
     Result<mach_o, internal_error> mach_o::open(cbspan object) {
-        return open(make_unique<memory_file_view>(object));
+        return open(makeUnique<memory_file_view>(object));
     }
 
     Result<std::uintptr_t, internal_error> mach_o::get_text_vmaddr() {

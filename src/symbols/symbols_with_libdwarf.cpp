@@ -9,6 +9,7 @@
 #include "utils/utils.hpp"
 #include "utils/UniquePtr.hpp"
 #include "options.hpp"
+#include "jit/jit_objects.hpp"
 
 #include <cstdint>
 #include <cstdio>
