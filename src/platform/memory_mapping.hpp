@@ -1,3 +1,4 @@
+#pragma once
 #include "utils/common.hpp"
 
 #ifndef _MSC_VER
